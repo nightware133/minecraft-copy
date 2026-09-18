@@ -1,0 +1,6 @@
+{
+  "name": "Voxel Sandbox",
+  "description": "A fully playable 3D Voxel Sandbox game inspired by Minecraft with 3D Steve character model, first-person animated arm & held tools, classic title screen, perspective toggle (1st/3rd person), infinite procedural world generation, underwater biomes, and crafting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
