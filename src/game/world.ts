@@ -27,6 +27,11 @@ export const BLOCK_TYPES = {
   YELLOW_FLOWER: 22,
   SEAWEED: 23,
   TORCH: 24,
+  SNOW: 25,
+  ICE: 26,
+  CACTUS: 27,
+  CHERRY_LEAVES: 28,
+  RED_SAND: 29,
 };
 
 export const CHUNK_SIZE = 16;
@@ -255,6 +260,41 @@ export class VoxelWorld {
     return 10;
   }
 
+  getHighestVisibleBlock(wx: number, wz: number): { y: number; blockId: number } {
+    for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+      const b = this.getBlock(wx, y, wz);
+      if (b !== BLOCK_TYPES.AIR) {
+        return { y, blockId: b };
+      }
+    }
+    return { y: 0, blockId: BLOCK_TYPES.BEDROCK };
+  }
+
+  getBiome(wx: number, wz: number, surfHeight?: number): { type: string; name: string; color: string } {
+    const sh = surfHeight !== undefined ? surfHeight : this.getTerrainHeight(wx, wz);
+    if (sh < SEA_LEVEL) {
+      return { type: 'ocean', name: 'Coral Ocean', color: '#2980b9' };
+    }
+    if (sh <= SEA_LEVEL + 1) {
+      return { type: 'beach', name: 'Golden Beach', color: '#f1c40f' };
+    }
+
+    // Continental climate noise (smooth 100-200 block wavelengths)
+    const temp = Math.sin(wx * 0.009 + 1.8) * Math.cos(wz * 0.009 - 0.4) * 0.5 + 0.5;
+    const humidity = Math.cos(wx * 0.01 - 1.2) * Math.sin(wz * 0.01 + 0.9) * 0.5 + 0.5;
+
+    if (temp < 0.28) {
+      return { type: 'snow', name: 'Snowy Peaks & Tundra', color: '#dff9fb' };
+    }
+    if (temp > 0.72 && humidity < 0.48) {
+      return { type: 'desert', name: 'Sunken Desert Dunes', color: '#f6e58d' };
+    }
+    if (humidity > 0.64 && temp >= 0.35 && temp <= 0.72) {
+      return { type: 'cherry', name: 'Cherry Blossom Grove', color: '#f8a5c2' };
+    }
+    return { type: 'plains', name: 'Lush Forest & Plains', color: '#2ecc71' };
+  }
+
   private pseudoNoise(x: number, y: number, seed: number = 777): number {
     const n = Math.sin(x * 12.9898 + y * 78.233 + seed * 43.123) * 43758.5453;
     return n - Math.floor(n);
@@ -290,12 +330,13 @@ export class VoxelWorld {
     const startX = chunk.startX;
     const startZ = chunk.startZ;
 
-    // 1. Base terrain columns (Bedrock, Stone, Caves, Sand, Dirt, Grass, Water)
+    // 1. Base terrain columns (Bedrock, Stone, Caves, Sand, Dirt, Grass, Snow, Ice, Water)
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const wx = startX + lx;
         const wz = startZ + lz;
         const surfHeight = this.getTerrainHeight(wx, wz);
+        const biome = this.getBiome(wx, wz, surfHeight);
 
         // Bedrock floor
         chunk.setBlock(lx, 0, lz, BLOCK_TYPES.BEDROCK);
@@ -304,9 +345,14 @@ export class VoxelWorld {
 
         for (let wy = 1; wy <= Math.max(surfHeight, SEA_LEVEL); wy++) {
           if (wy > surfHeight) {
-            // Above ground but below or at sea level -> WATER
+            // Above ground but below or at sea level
             if (wy <= SEA_LEVEL) {
-              chunk.setBlock(lx, wy, lz, BLOCK_TYPES.WATER);
+              // In snowy tundra, top surface of water freezes to ICE
+              if (biome.type === 'snow' && wy === SEA_LEVEL) {
+                chunk.setBlock(lx, wy, lz, BLOCK_TYPES.ICE);
+              } else {
+                chunk.setBlock(lx, wy, lz, BLOCK_TYPES.WATER);
+              }
             }
             continue;
           }
@@ -321,7 +367,7 @@ export class VoxelWorld {
             continue;
           }
 
-          // Stratified layers
+          // Stratified subterranean layers (Ores in deep stone)
           let stoneType = BLOCK_TYPES.STONE;
           if (wy <= surfHeight - 4) {
             if (wy <= 8 && wy >= 1 && this.pseudoNoise(wx * 2.7 + wy * 1.5, wz * 2.7 + wy * 0.8, 111) > 0.965) {
@@ -343,13 +389,24 @@ export class VoxelWorld {
               chunk.setBlock(lx, wy, lz, stoneType);
             }
           } else {
-            // Land biomes: Grass surface, Dirt beneath, Stone/Ores underneath
+            // Land Biomes:
+            const isRedDesert = biome.type === 'desert' && (Math.sin(wx * 0.05) + Math.cos(wz * 0.05)) > 0.4;
             if (wy === surfHeight) {
               if (surfHeight <= SEA_LEVEL + 1) {
                 chunk.setBlock(lx, wy, lz, BLOCK_TYPES.SAND); // Beach
+              } else if (biome.type === 'snow') {
+                chunk.setBlock(lx, wy, lz, BLOCK_TYPES.SNOW); // Snowy Tundra & Mountain Peak
+              } else if (biome.type === 'desert') {
+                chunk.setBlock(lx, wy, lz, isRedDesert ? BLOCK_TYPES.RED_SAND : BLOCK_TYPES.SAND); // Desert Dunes
+              } else if (biome.type === 'cherry') {
+                chunk.setBlock(lx, wy, lz, BLOCK_TYPES.GRASS); // Cherry Blossom Grove grass
+                // Petal scatter
+                const flowerNoise = this.pseudoNoise(wx, wz, 555);
+                if (flowerNoise > 0.9) {
+                  chunk.setBlock(lx, wy + 1, lz, BLOCK_TYPES.RED_FLOWER);
+                }
               } else {
-                chunk.setBlock(lx, wy, lz, BLOCK_TYPES.GRASS);
-                // Flowers on top of lush grass
+                chunk.setBlock(lx, wy, lz, BLOCK_TYPES.GRASS); // Lush Plains
                 const flowerNoise = this.pseudoNoise(wx, wz, 555);
                 if (flowerNoise > 0.935) {
                   chunk.setBlock(lx, wy + 1, lz, BLOCK_TYPES.RED_FLOWER);
@@ -358,7 +415,11 @@ export class VoxelWorld {
                 }
               }
             } else if (wy >= surfHeight - 3) {
-              chunk.setBlock(lx, wy, lz, BLOCK_TYPES.DIRT);
+              if (biome.type === 'desert') {
+                chunk.setBlock(lx, wy, lz, isRedDesert ? BLOCK_TYPES.RED_SAND : BLOCK_TYPES.SAND);
+              } else {
+                chunk.setBlock(lx, wy, lz, BLOCK_TYPES.DIRT);
+              }
             } else {
               chunk.setBlock(lx, wy, lz, stoneType);
             }
@@ -396,58 +457,90 @@ export class VoxelWorld {
       }
     }
 
-    // 4. Procedural Oak & Birch Trees
-    // Check tree trunks within and slightly beyond chunk borders [-2 .. CHUNK_SIZE+1]
-    // so canopy overhang is 100% seamless and deterministic
+    // 4. Procedural Biome Flora & Trees (Cacti in Desert, Cherry Blossoms, Snowy Spruces, Oak/Birch)
     for (let tx = startX - 2; tx <= startX + CHUNK_SIZE + 1; tx++) {
       for (let tz = startZ - 2; tz <= startZ + CHUNK_SIZE + 1; tz++) {
-        // Tree spacing check: grid of 3 with pseudoNoise
-        if (Math.abs(tx) % 3 === 0 && Math.abs(tz) % 3 === 0) {
-          if (this.pseudoNoise(tx, tz, 42) > 0.72) {
-            const surfY = this.getTerrainHeight(tx, tz);
-            if (surfY > SEA_LEVEL + 1 && surfY < WORLD_HEIGHT - 9) {
-              const isBirch = this.pseudoNoise(tx, tz, 123) > 0.45;
-              const trunkBlock = isBirch ? BLOCK_TYPES.BIRCH_WOOD : BLOCK_TYPES.WOOD;
-              const trunkHeight = 4 + Math.floor(this.pseudoNoise(tx, tz, 99) * 2);
+        const surfY = this.getTerrainHeight(tx, tz);
+        if (surfY <= SEA_LEVEL + 1 || surfY >= WORLD_HEIGHT - 9) continue;
+        const b = this.getBiome(tx, tz, surfY);
 
-              // Place trunk if inside current chunk
-              for (let y = 1; y <= trunkHeight; y++) {
+        if (b.type === 'desert') {
+          // Desert Cacti: spaced grid with natural height 2-4 blocks
+          if (Math.abs(tx) % 4 === 0 && Math.abs(tz) % 4 === 0) {
+            if (this.pseudoNoise(tx, tz, 77) > 0.72) {
+              const cactusHeight = 2 + Math.floor(this.pseudoNoise(tx, tz, 88) * 2.6);
+              for (let cy = 1; cy <= cactusHeight; cy++) {
                 const wx = tx;
-                const wy = surfY + y;
+                const wy = surfY + cy;
                 const wz = tz;
                 if (wx >= startX && wx < startX + CHUNK_SIZE && wz >= startZ && wz < startZ + CHUNK_SIZE) {
-                  chunk.setBlock(wx - startX, wy, wz - startZ, trunkBlock);
+                  chunk.setBlock(wx - startX, wy, wz - startZ, BLOCK_TYPES.CACTUS);
                 }
               }
+            }
+          }
+          continue;
+        }
 
-              // Soil under trunk
-              if (tx >= startX && tx < startX + CHUNK_SIZE && tz >= startZ && tz < startZ + CHUNK_SIZE) {
-                chunk.setBlock(tx - startX, surfY, tz - startZ, BLOCK_TYPES.DIRT);
+        // Forest, Snow & Cherry Trees
+        if (Math.abs(tx) % 3 === 0 && Math.abs(tz) % 3 === 0) {
+          if (this.pseudoNoise(tx, tz, 42) > 0.7) {
+            const isSnowy = b.type === 'snow';
+            const isCherry = b.type === 'cherry';
+            const isBirch = !isSnowy && !isCherry && this.pseudoNoise(tx, tz, 123) > 0.45;
+
+            const trunkBlock = isBirch ? BLOCK_TYPES.BIRCH_WOOD : BLOCK_TYPES.WOOD;
+            const trunkHeight = isSnowy ? 5 + Math.floor(this.pseudoNoise(tx, tz, 99) * 2) : 4 + Math.floor(this.pseudoNoise(tx, tz, 99) * 2);
+
+            // Place trunk
+            for (let y = 1; y <= trunkHeight; y++) {
+              const wx = tx;
+              const wy = surfY + y;
+              const wz = tz;
+              if (wx >= startX && wx < startX + CHUNK_SIZE && wz >= startZ && wz < startZ + CHUNK_SIZE) {
+                chunk.setBlock(wx - startX, wy, wz - startZ, trunkBlock);
+              }
+            }
+
+            // Soil beneath trunk
+            if (tx >= startX && tx < startX + CHUNK_SIZE && tz >= startZ && tz < startZ + CHUNK_SIZE) {
+              chunk.setBlock(tx - startX, surfY, tz - startZ, BLOCK_TYPES.DIRT);
+            }
+
+            // Foliage canopy
+            const leafType = isCherry ? BLOCK_TYPES.CHERRY_LEAVES : BLOCK_TYPES.LEAVES;
+            const leafStart = surfY + trunkHeight - (isSnowy ? 2 : 1);
+            const leafEnd = surfY + trunkHeight + 2;
+
+            for (let ly = leafStart; ly <= leafEnd; ly++) {
+              let radius = 2;
+              if (isSnowy) {
+                // Conical spruce tapering
+                radius = ly >= surfY + trunkHeight + 1 ? 0 : ly >= surfY + trunkHeight - 1 ? 1 : 2;
+              } else {
+                radius = ly >= surfY + trunkHeight + 1 ? 1 : 2;
               }
 
-              // Foliage canopy
-              const leafStart = surfY + trunkHeight - 1;
-              const leafEnd = surfY + trunkHeight + 2;
-
-              for (let ly = leafStart; ly <= leafEnd; ly++) {
-                const radius = ly >= surfY + trunkHeight + 1 ? 1 : 2;
-                for (let ox = -radius; ox <= radius; ox++) {
-                  for (let oz = -radius; oz <= radius; oz++) {
-                    if (ox === 0 && oz === 0 && ly <= surfY + trunkHeight) continue;
-                    if (
-                      Math.abs(ox) === radius &&
-                      Math.abs(oz) === radius &&
-                      this.pseudoNoise(tx + ox, tz + oz, ly) > 0.4
-                    ) {
-                      continue;
-                    }
-                    const wx = tx + ox;
-                    const wz = tz + oz;
-                    if (wx >= startX && wx < startX + CHUNK_SIZE && wz >= startZ && wz < startZ + CHUNK_SIZE) {
-                      const lx = wx - startX;
-                      const lz = wz - startZ;
-                      if (chunk.getBlock(lx, ly, lz) === BLOCK_TYPES.AIR) {
-                        chunk.setBlock(lx, ly, lz, BLOCK_TYPES.LEAVES);
+              for (let ox = -radius; ox <= radius; ox++) {
+                for (let oz = -radius; oz <= radius; oz++) {
+                  if (ox === 0 && oz === 0 && ly <= surfY + trunkHeight) continue;
+                  if (
+                    Math.abs(ox) === radius &&
+                    Math.abs(oz) === radius &&
+                    this.pseudoNoise(tx + ox, tz + oz, ly) > 0.4
+                  ) {
+                    continue;
+                  }
+                  const wx = tx + ox;
+                  const wz = tz + oz;
+                  if (wx >= startX && wx < startX + CHUNK_SIZE && wz >= startZ && wz < startZ + CHUNK_SIZE) {
+                    const lx = wx - startX;
+                    const lz = wz - startZ;
+                    if (chunk.getBlock(lx, ly, lz) === BLOCK_TYPES.AIR) {
+                      chunk.setBlock(lx, ly, lz, leafType);
+                      // In snowy biome, top leaf layer gets a snow cap
+                      if (isSnowy && ly === leafEnd && chunk.getBlock(lx, ly + 1, lz) === BLOCK_TYPES.AIR) {
+                        chunk.setBlock(lx, ly + 1, lz, BLOCK_TYPES.SNOW);
                       }
                     }
                   }
@@ -513,6 +606,16 @@ export class VoxelWorld {
         return mi.seaweed;
       case BLOCK_TYPES.TORCH:
         return mi.torch;
+      case BLOCK_TYPES.SNOW:
+        return mi.snow;
+      case BLOCK_TYPES.ICE:
+        return mi.ice;
+      case BLOCK_TYPES.CACTUS:
+        return mi.cactus;
+      case BLOCK_TYPES.CHERRY_LEAVES:
+        return mi.cherryLeaves;
+      case BLOCK_TYPES.RED_SAND:
+        return mi.redSand;
       default:
         return mi.dirt;
     }
@@ -574,7 +677,9 @@ export class VoxelWorld {
                 neighbor === BLOCK_TYPES.SEAWEED ||
                 neighbor === BLOCK_TYPES.TORCH ||
                 (neighbor === BLOCK_TYPES.LEAVES && block !== BLOCK_TYPES.LEAVES) ||
-                (neighbor === BLOCK_TYPES.GLASS && block !== BLOCK_TYPES.GLASS)
+                (neighbor === BLOCK_TYPES.CHERRY_LEAVES && block !== BLOCK_TYPES.CHERRY_LEAVES) ||
+                (neighbor === BLOCK_TYPES.GLASS && block !== BLOCK_TYPES.GLASS) ||
+                (neighbor === BLOCK_TYPES.ICE && block !== BLOCK_TYPES.ICE)
               ) {
                 renderFace = true;
               }

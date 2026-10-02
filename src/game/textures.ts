@@ -31,6 +31,11 @@ export interface BlockTextureAtlas {
     yellowFlower: number;
     seaweed: number;
     torch: number;
+    snow: number;
+    ice: number;
+    cactus: number;
+    cherryLeaves: number;
+    redSand: number;
   };
 }
 
@@ -610,6 +615,108 @@ export function generateProceduralBlockTextures(): BlockTextureAtlas {
     ctx.fillRect(7, 3, 2, 2);
   });
 
+  // 28. Snow Block (Crisp white with crystalline glints)
+  const snow = createTextureCanvas((ctx, s) => {
+    ctx.fillStyle = '#f5f7fa';
+    ctx.fillRect(0, 0, s, s);
+    for (let x = 0; x < s; x++) {
+      for (let y = 0; y < s; y++) {
+        const v = pseudoNoise(x, y, 44);
+        if (v > 0.8) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(x, y, 1, 1);
+        } else if (v < 0.2) {
+          ctx.fillStyle = '#e4ebf5';
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+  });
+
+  // 29. Ice Block (Glacial translucent cyan crystalline)
+  const ice = createTextureCanvas((ctx, s) => {
+    ctx.fillStyle = '#83d3f5';
+    ctx.fillRect(0, 0, s, s);
+    for (let x = 0; x < s; x++) {
+      for (let y = 0; y < s; y++) {
+        const v = pseudoNoise(x, y, 55);
+        if (v > 0.8) {
+          ctx.fillStyle = '#c5eefc';
+          ctx.fillRect(x, y, 1, 1);
+        } else if (v < 0.22) {
+          ctx.fillStyle = '#5eb8dc';
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+    // Subtle internal ice fracture streaks
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(3, 4, 3, 1);
+    ctx.fillRect(9, 10, 4, 1);
+    ctx.fillRect(5, 12, 2, 1);
+  });
+
+  // 30. Cactus (Desert plant with vertical grooves and white spines)
+  const cactus = createTextureCanvas((ctx, s) => {
+    ctx.fillStyle = '#348d3c';
+    ctx.fillRect(0, 0, s, s);
+    // Vertical grooves
+    for (let x = 0; x < s; x += 4) {
+      ctx.fillStyle = '#266f2d';
+      ctx.fillRect(x, 0, 1, s);
+    }
+    // Spines / Thorns
+    const spines = [[2, 2], [6, 4], [10, 3], [14, 5], [2, 9], [6, 11], [10, 10], [14, 12], [4, 7], [12, 8]];
+    for (const [sx, sy] of spines) {
+      ctx.fillStyle = '#1e5423';
+      ctx.fillRect(sx, sy, 2, 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(sx, sy, 1, 1);
+    }
+  });
+
+  // 31. Cherry Leaves (Vibrant sakura blossom cluster with pastel pink petals)
+  const cherryLeaves = createTextureCanvas((ctx, s) => {
+    ctx.fillStyle = '#f48fb1';
+    ctx.fillRect(0, 0, s, s);
+    for (let x = 0; x < s; x++) {
+      for (let y = 0; y < s; y++) {
+        const v = pseudoNoise(x, y, 66);
+        if (v > 0.78) {
+          ctx.fillStyle = '#ffffff'; // White highlights
+          ctx.fillRect(x, y, 1, 1);
+        } else if (v > 0.55) {
+          ctx.fillStyle = '#f06292'; // Deep petal pink
+          ctx.fillRect(x, y, 1, 1);
+        } else if (v < 0.18) {
+          ctx.fillStyle = '#81c784'; // Soft green stem leaf
+          ctx.fillRect(x, y, 1, 1);
+        } else if (v < 0.35) {
+          ctx.fillStyle = '#ec407a'; // Magenta depth
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+  });
+
+  // 32. Red Sand (Terracotta desert red sand)
+  const redSand = createTextureCanvas((ctx, s) => {
+    ctx.fillStyle = '#c75932';
+    ctx.fillRect(0, 0, s, s);
+    for (let x = 0; x < s; x++) {
+      for (let y = 0; y < s; y++) {
+        const v = pseudoNoise(x, y, 77);
+        if (v > 0.75) {
+          ctx.fillStyle = '#dc6f45';
+          ctx.fillRect(x, y, 1, 1);
+        } else if (v < 0.25) {
+          ctx.fillStyle = '#a84523';
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+  });
+
   // Three.js Materials
   const createMat = (tex: THREE.CanvasTexture, transparent: boolean = false, opacity: number = 1.0) =>
     new THREE.MeshLambertMaterial({
@@ -647,6 +754,11 @@ export function generateProceduralBlockTextures(): BlockTextureAtlas {
     createMat(yellowFlower.texture),      // 24: yellowFlower
     createMat(seaweed.texture, true, 0.9),// 25: seaweed
     createMat(torch.texture),             // 26: torch
+    createMat(snow.texture),              // 27: snow
+    createMat(ice.texture, true, 0.72),   // 28: ice
+    createMat(cactus.texture),            // 29: cactus
+    createMat(cherryLeaves.texture),      // 30: cherryLeaves
+    createMat(redSand.texture),           // 31: redSand
   ];
 
   return {
@@ -677,6 +789,11 @@ export function generateProceduralBlockTextures(): BlockTextureAtlas {
       yellowFlower: yellowFlower.dataUrl,
       seaweed: seaweed.dataUrl,
       torch: torch.dataUrl,
+      snow: snow.dataUrl,
+      ice: ice.dataUrl,
+      cactus: cactus.dataUrl,
+      cherryLeaves: cherryLeaves.dataUrl,
+      redSand: redSand.dataUrl,
     },
     matIndices: {
       dirt: 0,
@@ -706,6 +823,11 @@ export function generateProceduralBlockTextures(): BlockTextureAtlas {
       yellowFlower: 24,
       seaweed: 25,
       torch: 26,
+      snow: 27,
+      ice: 28,
+      cactus: 29,
+      cherryLeaves: 30,
+      redSand: 31,
     },
   };
 }

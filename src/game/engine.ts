@@ -79,10 +79,26 @@ export class VoxelGameEngine {
 
   timeOfDay: number = 0.25; // 0 to 1
   isLocked: boolean = false;
+  isPaused: boolean = false;
   isMouseDown: boolean = false;
   lastMouseX: number = 0;
   lastMouseY: number = 0;
   pointerLockBlocked: boolean = false;
+
+  public setPaused(paused: boolean) {
+    this.isPaused = paused;
+    this.lastTime = performance.now();
+    if (paused) {
+      this.keys = {};
+      this.isMouseDown = false;
+      this.isMining = false;
+      this.miningProgress = 0;
+      this.miningBlock = null;
+      if (this.wireframeBox) this.wireframeBox.visible = false;
+      if (this.breakOverlay) this.breakOverlay.hide();
+      sounds.pauseAmbience();
+    }
+  }
 
   onStatsUpdate?: (stats: EngineStats) => void;
   isRunning: boolean = true;
@@ -198,6 +214,7 @@ export class VoxelGameEngine {
 
   private attachEvents() {
     this.renderer.domElement.addEventListener('click', () => {
+      if (this.isPaused || this.inPanoramaMode) return;
       if (!this.isLocked) {
         try {
           const promise = this.renderer.domElement.requestPointerLock();
@@ -228,6 +245,7 @@ export class VoxelGameEngine {
   }
 
   private onMouseMove(e: MouseEvent) {
+    if (this.isPaused || this.inPanoramaMode) return;
     const sensitivity = 0.0024;
     if (this.isLocked) {
       this.physics.yaw -= e.movementX * sensitivity;
@@ -245,6 +263,7 @@ export class VoxelGameEngine {
   }
 
   private onMouseDown(e: MouseEvent) {
+    if (this.isPaused || this.inPanoramaMode) return;
     this.isMouseDown = true;
     this.lastMouseX = e.clientX;
     this.lastMouseY = e.clientY;
@@ -264,12 +283,12 @@ export class VoxelGameEngine {
         damage = 40;
       } else if (activeId === ITEM_TYPES.IRON_SWORD) {
         damage = 26;
-      } else if (activeId === ITEM_TYPES.WOODEN_SWORD) {
+      } else if (activeId === ITEM_TYPES.WOOD_SWORD) {
         damage = 15;
       } else if (
         activeId === ITEM_TYPES.DIAMOND_PICKAXE ||
         activeId === ITEM_TYPES.IRON_PICKAXE ||
-        activeId === ITEM_TYPES.WOODEN_PICKAXE
+        activeId === ITEM_TYPES.WOOD_PICKAXE
       ) {
         damage = 12;
       }
@@ -350,6 +369,7 @@ export class VoxelGameEngine {
   }
 
   private onKeyDown(e: KeyboardEvent) {
+    if (this.isPaused || this.inPanoramaMode) return;
     this.keys[e.code] = true;
     // 1-6 Hotbar selection
     if (e.code >= 'Digit1' && e.code <= 'Digit6') {
@@ -365,10 +385,12 @@ export class VoxelGameEngine {
   }
 
   private onKeyUp(e: KeyboardEvent) {
+    if (this.isPaused || this.inPanoramaMode) return;
     this.keys[e.code] = false;
   }
 
   private onWheel(e: WheelEvent) {
+    if (this.isPaused || this.inPanoramaMode) return;
     const prev = this.inventory.selectedHotbarIndex;
     if (e.deltaY > 0) {
       this.inventory.selectedHotbarIndex = (this.inventory.selectedHotbarIndex + 1) % 6;
@@ -438,6 +460,11 @@ export class VoxelGameEngine {
     else if (blockType === BLOCK_TYPES.YELLOW_FLOWER) color = 0xffe033;
     else if (blockType === BLOCK_TYPES.SEAWEED) color = 0x228b22;
     else if (blockType === BLOCK_TYPES.TORCH) color = 0xffa500;
+    else if (blockType === BLOCK_TYPES.SNOW) color = 0xf0f8ff;
+    else if (blockType === BLOCK_TYPES.ICE) color = 0x90caf9;
+    else if (blockType === BLOCK_TYPES.CACTUS) color = 0x2e7d32;
+    else if (blockType === BLOCK_TYPES.CHERRY_LEAVES) color = 0xf48fb1;
+    else if (blockType === BLOCK_TYPES.RED_SAND) color = 0xb7532a;
 
     const geo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
     const mat = new THREE.MeshBasicMaterial({ color });
@@ -467,17 +494,25 @@ export class VoxelGameEngine {
   private getBlockHardnessTime(blockType: number): number {
     switch (blockType) {
       case BLOCK_TYPES.LEAVES:
+      case BLOCK_TYPES.CHERRY_LEAVES:
       case BLOCK_TYPES.RED_FLOWER:
       case BLOCK_TYPES.YELLOW_FLOWER:
       case BLOCK_TYPES.SEAWEED:
       case BLOCK_TYPES.TORCH:
         return 0.2;
+      case BLOCK_TYPES.SNOW:
+        return 0.25;
       case BLOCK_TYPES.GLASS:
         return 0.35;
+      case BLOCK_TYPES.CACTUS:
+        return 0.4;
       case BLOCK_TYPES.DIRT:
       case BLOCK_TYPES.GRASS:
       case BLOCK_TYPES.SAND:
+      case BLOCK_TYPES.RED_SAND:
         return 0.65;
+      case BLOCK_TYPES.ICE:
+        return 0.75;
       case BLOCK_TYPES.CORAL_PINK:
       case BLOCK_TYPES.CORAL_CYAN:
       case BLOCK_TYPES.CORAL_YELLOW:
@@ -808,6 +843,12 @@ export class VoxelGameEngine {
       }
     }
 
+    if (this.isPaused) {
+      this.renderer.render(this.scene, this.camera);
+      requestAnimationFrame(this.animate.bind(this));
+      return;
+    }
+
     if (this.inPanoramaMode) {
       // 1. Cinematic Rotating Orbit for Minecraft Title Screen
       const panSpeed = now * 0.00015;
@@ -1024,9 +1065,45 @@ export class VoxelGameEngine {
     }
   }
 
+  setDifficulty(difficulty: GameDifficulty) {
+    this.physics.difficulty = difficulty;
+    // If set to peaceful, immediately clear hostile mobs
+    if (difficulty === 'peaceful') {
+      for (let i = this.mobs.mobs.length - 1; i >= 0; i--) {
+        if (this.mobs.mobs[i].type === 'zombie') {
+          this.mobs.mobs[i].destroy();
+          this.mobs.mobs.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  setGameMode(mode: GameMode) {
+    this.physics.gameMode = mode;
+    if (mode === 'survival') {
+      this.physics.isFlying = false;
+    }
+  }
+
+  toggleFlight() {
+    this.physics.toggleFlight();
+  }
+
+  spawnMob(type: MobType) {
+    // Spawn 3-5 blocks in front of player
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    dir.y = 0;
+    dir.normalize();
+    const spawnPos = this.physics.position.clone().addScaledVector(dir, 4.0);
+    spawnPos.y = this.world.getHighestSolidBlock(Math.floor(spawnPos.x), Math.floor(spawnPos.z)) + 0.1;
+    return this.mobs.spawnMob(type, spawnPos);
+  }
+
   destroy() {
     this.isRunning = false;
     this.weather.destroy();
+    this.mobs.destroy();
     this.breakOverlay.dispose();
     document.removeEventListener('pointerlockchange', this.boundOnPointerLockChange);
     window.removeEventListener('mousemove', this.boundOnMouseMove);

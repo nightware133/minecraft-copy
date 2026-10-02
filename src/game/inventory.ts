@@ -158,6 +158,11 @@ export const ITEM_DEFINITIONS: Record<number, ItemDef> = {
   [BLOCK_TYPES.YELLOW_FLOWER]: { id: BLOCK_TYPES.YELLOW_FLOWER, name: 'Dandelion', isBlock: true, blockType: BLOCK_TYPES.YELLOW_FLOWER, maxStack: 64 },
   [BLOCK_TYPES.SEAWEED]: { id: BLOCK_TYPES.SEAWEED, name: 'Seaweed', isBlock: true, blockType: BLOCK_TYPES.SEAWEED, maxStack: 64 },
   [BLOCK_TYPES.TORCH]: { id: BLOCK_TYPES.TORCH, name: 'Torch', isBlock: true, blockType: BLOCK_TYPES.TORCH, maxStack: 64 },
+  [BLOCK_TYPES.SNOW]: { id: BLOCK_TYPES.SNOW, name: 'Snow Block', isBlock: true, blockType: BLOCK_TYPES.SNOW, maxStack: 64 },
+  [BLOCK_TYPES.ICE]: { id: BLOCK_TYPES.ICE, name: 'Ice', isBlock: true, blockType: BLOCK_TYPES.ICE, maxStack: 64 },
+  [BLOCK_TYPES.CACTUS]: { id: BLOCK_TYPES.CACTUS, name: 'Cactus', isBlock: true, blockType: BLOCK_TYPES.CACTUS, maxStack: 64 },
+  [BLOCK_TYPES.CHERRY_LEAVES]: { id: BLOCK_TYPES.CHERRY_LEAVES, name: 'Cherry Leaves', isBlock: true, blockType: BLOCK_TYPES.CHERRY_LEAVES, maxStack: 64 },
+  [BLOCK_TYPES.RED_SAND]: { id: BLOCK_TYPES.RED_SAND, name: 'Red Sand', isBlock: true, blockType: BLOCK_TYPES.RED_SAND, maxStack: 64 },
   // Non-block items
   [ITEM_TYPES.STICK]: { id: ITEM_TYPES.STICK, name: 'Wooden Stick', isBlock: false, icon: STICK_ICON, maxStack: 64 },
   [ITEM_TYPES.WOOD_PICKAXE]: { id: ITEM_TYPES.WOOD_PICKAXE, name: 'Wooden Pickaxe', isBlock: false, icon: WOOD_PICKAXE_ICON, maxStack: 1 },
@@ -696,6 +701,50 @@ export class InventorySystem {
     // Add result item
     this.addItem(recipe.result.id, recipe.result.count);
     return true;
+  }
+
+  // Directly grants an item in Creative mode with no requirements
+  giveItemDirect(id: number, count: number = 64): boolean {
+    const def = ITEM_DEFINITIONS[id];
+    const isTool = !!TOOL_DURABILITIES[id];
+    const maxDur = TOOL_DURABILITIES[id];
+    const isArmor = !!ARMOR_DATA[id];
+
+    if (isTool) {
+      const added = this.addItem(id, 1, maxDur);
+      if (!added) {
+        this.slots[this.selectedHotbarIndex] = {
+          id,
+          count: 1,
+          durability: maxDur,
+          maxDurability: maxDur,
+        };
+      }
+      return true;
+    }
+
+    if (isArmor) {
+      const added = this.addItem(id, 1);
+      if (!added) {
+        this.slots[this.selectedHotbarIndex] = { id, count: 1 };
+      }
+      return true;
+    }
+
+    const maxStack = def?.maxStack || 64;
+    const finalCount = Math.min(count, maxStack);
+    const added = this.addItem(id, finalCount);
+    if (!added) {
+      this.slots[this.selectedHotbarIndex] = { id, count: finalCount };
+    }
+    return true;
+  }
+
+  clearBackpack() {
+    // Clear slots 6 to 23 (keep hotbar 0-5 intact)
+    for (let i = 6; i < this.slots.length; i++) {
+      this.slots[i] = null;
+    }
   }
 
   swapSlots(fromIndex: number, toIndex: number) {

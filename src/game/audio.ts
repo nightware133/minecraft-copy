@@ -301,6 +301,15 @@ export class SoundManager {
     }
   }
 
+  // Fade out ambient sounds when game is paused
+  public pauseAmbience() {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    if (this.windGain) this.windGain.gain.setTargetAtTime(0, now, 0.15);
+    if (this.oceanGain) this.oceanGain.gain.setTargetAtTime(0, now, 0.15);
+    if (this.rainGain) this.rainGain.gain.setTargetAtTime(0, now, 0.15);
+  }
+
   // --- THUNDERSTORM SFX ---
   public playThunder() {
     try {
