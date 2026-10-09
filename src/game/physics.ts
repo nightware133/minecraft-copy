@@ -16,6 +16,8 @@ export class PlayerPhysics {
   inWater: boolean = false;
   isSubmerged: boolean = false; // Eyes underwater (affects breathing/fog)
   isSprinting: boolean = false;
+  justEnteredWater: boolean = false;
+  justExitedWater: boolean = false;
 
   // Game Mode & Difficulty
   gameMode: GameMode = 'survival';
@@ -28,6 +30,18 @@ export class PlayerPhysics {
   maxHealth: number = 100;
   oxygen: number = 100;
   maxOxygen: number = 100;
+  hunger: number = 20; // 0 to 20 (10 drumsticks in Minecraft)
+  maxHunger: number = 20;
+  saturation: number = 5.0;
+  exhaustion: number = 0;
+  private healthRegenTimer: number = 0;
+  private starveTimer: number = 0;
+
+  // Consume food to restore hunger and saturation
+  feed(hungerPoints: number, satPoints: number = 2.0) {
+    this.hunger = Math.min(this.maxHunger, this.hunger + hungerPoints);
+    this.saturation = Math.min(this.hunger, this.saturation + satPoints);
+  }
 
   // View angles
   yaw: number = 0;
@@ -98,26 +112,93 @@ export class PlayerPhysics {
     const waistInWater = this.world.getBlock(feetX, waistY, feetZ) === BLOCK_TYPES.WATER;
     const headInWater = this.world.getBlock(feetX, eyeY, feetZ) === BLOCK_TYPES.WATER;
 
+    const prevInWater = this.inWater;
     this.inWater = feetInWater || waistInWater || headInWater;
     this.isSubmerged = headInWater;
 
-    // 2. Breathing & Health mechanics
+    this.justEnteredWater = !prevInWater && this.inWater;
+    this.justExitedWater = prevInWater && !this.inWater;
+
+    // Magma Block heat hazard when standing directly on Magma
+    const standingOnBlock = this.world.getBlock(feetX, Math.floor(this.position.y - 0.1), feetZ);
+    if (standingOnBlock === BLOCK_TYPES.MAGMA && this.onGround && this.gameMode !== 'creative') {
+      if (!keys['ShiftLeft'] && !keys['ShiftRight']) {
+        this.takeDamage(12.0 * delta);
+      }
+    }
+
+    // 2. Breathing, Hunger & Health mechanics
     if (this.gameMode === 'creative') {
       this.health = 100;
       this.oxygen = 100;
-    } else if (this.isSubmerged) {
-      this.oxygen = Math.max(0, this.oxygen - 12.0 * delta);
-      if (this.oxygen <= 0) {
-        // Drowning damage
-        this.health = Math.max(0, this.health - 16.0 * delta);
+      this.hunger = 20;
+    } else if (this.difficulty === 'peaceful') {
+      this.hunger = 20;
+      if (this.health < this.maxHealth) {
+        this.health = Math.min(this.maxHealth, this.health + 20.0 * delta);
+      }
+      if (this.isSubmerged) {
+        this.oxygen = Math.max(0, this.oxygen - 12.0 * delta);
+        if (this.oxygen <= 0) this.health = Math.max(0, this.health - 16.0 * delta);
+      } else {
+        this.oxygen = Math.min(this.maxOxygen, this.oxygen + 35.0 * delta);
       }
     } else {
-      // Oxygen rapidly replenishes above water
-      this.oxygen = Math.min(this.maxOxygen, this.oxygen + 35.0 * delta);
-      // Health regenerates (much faster in Peaceful mode)
-      const regenRate = this.difficulty === 'peaceful' ? 25.0 : 4.0;
-      if (this.health < this.maxHealth) {
-        this.health = Math.min(this.maxHealth, this.health + regenRate * delta);
+      // Oxygen handling
+      if (this.isSubmerged) {
+        this.oxygen = Math.max(0, this.oxygen - 12.0 * delta);
+        if (this.oxygen <= 0) {
+          // Drowning damage
+          this.health = Math.max(0, this.health - 16.0 * delta);
+        }
+      } else {
+        this.oxygen = Math.min(this.maxOxygen, this.oxygen + 35.0 * delta);
+      }
+
+      // Hunger exhaustion drain
+      if (this.isSprinting) {
+        this.exhaustion += 0.85 * delta;
+      } else if (this.velocity.x !== 0 || this.velocity.z !== 0) {
+        this.exhaustion += 0.08 * delta;
+      } else {
+        this.exhaustion += 0.015 * delta; // Passive resting metabolism
+      }
+
+      while (this.exhaustion >= 4.0) {
+        this.exhaustion -= 4.0;
+        if (this.saturation > 0) {
+          this.saturation = Math.max(0, this.saturation - 1);
+        } else {
+          this.hunger = Math.max(0, this.hunger - 1);
+        }
+      }
+
+      // Health regenerates ONLY when hunger is high (hunger >= 18 points = at least 9 drumsticks)
+      if (this.hunger >= 18 && this.health < this.maxHealth) {
+        this.healthRegenTimer += delta;
+        const regenInterval = this.hunger === 20 && this.saturation > 0 ? 1.5 : 2.5;
+        if (this.healthRegenTimer >= regenInterval) {
+          this.healthRegenTimer = 0;
+          this.health = Math.min(this.maxHealth, this.health + 8);
+          // Healing consumes hunger saturation
+          this.exhaustion += 1.5;
+        }
+      } else {
+        this.healthRegenTimer = 0;
+      }
+
+      // Starvation damage when hunger is completely depleted (0)
+      if (this.hunger === 0) {
+        this.starveTimer += delta;
+        if (this.starveTimer >= 3.5) {
+          this.starveTimer = 0;
+          const minStarveHealth = this.difficulty === 'hard' ? 0 : this.difficulty === 'normal' ? 10 : 50;
+          if (this.health > minStarveHealth) {
+            this.takeDamage(10);
+          }
+        }
+      } else {
+        this.starveTimer = 0;
       }
     }
 
@@ -190,7 +271,8 @@ export class PlayerPhysics {
       }
     } else {
       // Land / Air physics
-      this.isSprinting = !!(keys['ShiftLeft'] || keys['ShiftRight']);
+      const wantsSprint = !!(keys['ShiftLeft'] || keys['ShiftRight']);
+      this.isSprinting = wantsSprint && (this.hunger > 6 || this.gameMode === 'creative');
       const isSprinting = this.isSprinting;
       const speed = isSprinting ? this.sprintSpeed : this.walkSpeed;
 
@@ -206,6 +288,7 @@ export class PlayerPhysics {
         if (keys['Space']) {
           this.velocity.y = this.jumpVelocity;
           this.onGround = false;
+          this.exhaustion += 0.2;
         }
       } else {
         // Air control

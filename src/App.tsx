@@ -14,6 +14,9 @@ import {
   ItemStack,
   ARMOR_DATA,
   TOOL_DURABILITIES,
+  SMELTING_RECIPES,
+  FUEL_VALUES,
+  FOOD_NUTRITION,
 } from './game/inventory';
 import { WeatherType } from './game/weather';
 import { GameDifficulty, GameMode, MobType } from './game/mobs';
@@ -49,11 +52,15 @@ import {
   X,
   Search,
   Trash2,
+  Flame,
+  Utensils,
+  ChefHat,
 } from 'lucide-react';
 import { sounds } from './game/audio';
 import { SoundSettingsModal } from './components/SoundSettingsModal';
 import { Minimap } from './components/Minimap';
 import { LoadingScreen } from './components/LoadingScreen';
+import { FurnaceModal } from './components/FurnaceModal';
 
 interface CreativeCategory {
   id: string;
@@ -75,6 +82,24 @@ const CREATIVE_ITEM_CATEGORIES: CreativeCategory[] = [
       BLOCK_TYPES.GLASS,
       BLOCK_TYPES.SAND,
       BLOCK_TYPES.RED_SAND,
+      BLOCK_TYPES.TERRACOTTA,
+      BLOCK_TYPES.RED_TERRACOTTA,
+      BLOCK_TYPES.ORANGE_TERRACOTTA,
+      BLOCK_TYPES.YELLOW_TERRACOTTA,
+      BLOCK_TYPES.WHITE_TERRACOTTA,
+      BLOCK_TYPES.BROWN_TERRACOTTA,
+      BLOCK_TYPES.DARK_OAK_WOOD,
+      BLOCK_TYPES.DARK_OAK_LEAVES,
+      BLOCK_TYPES.JUNGLE_WOOD,
+      BLOCK_TYPES.JUNGLE_LEAVES,
+      BLOCK_TYPES.RED_MUSHROOM_BLOCK,
+      BLOCK_TYPES.BROWN_MUSHROOM_BLOCK,
+      BLOCK_TYPES.MUSHROOM_STEM,
+      BLOCK_TYPES.MELON,
+      BLOCK_TYPES.PUMPKIN,
+      BLOCK_TYPES.LILY_PAD,
+      BLOCK_TYPES.MUD,
+      BLOCK_TYPES.MOSS,
       BLOCK_TYPES.SNOW,
       BLOCK_TYPES.ICE,
       BLOCK_TYPES.CACTUS,
@@ -89,23 +114,48 @@ const CREATIVE_ITEM_CATEGORIES: CreativeCategory[] = [
       BLOCK_TYPES.RED_FLOWER,
       BLOCK_TYPES.YELLOW_FLOWER,
       BLOCK_TYPES.SEAWEED,
+      BLOCK_TYPES.FURNACE,
+      BLOCK_TYPES.SPRUCE_WOOD,
+      BLOCK_TYPES.SPRUCE_LEAVES,
     ],
   },
   {
     id: 'ores',
-    name: 'Ores & Items',
+    name: 'Food, Ores & Items',
     itemIds: [
+      ITEM_TYPES.COOKED_BEEF,
+      ITEM_TYPES.RAW_BEEF,
+      ITEM_TYPES.COOKED_PORKCHOP,
+      ITEM_TYPES.RAW_PORKCHOP,
+      ITEM_TYPES.COOKED_MUTTON,
+      ITEM_TYPES.RAW_MUTTON,
+      ITEM_TYPES.COOKED_CHICKEN,
+      ITEM_TYPES.RAW_CHICKEN,
+      ITEM_TYPES.LEATHER,
+      ITEM_TYPES.FEATHER,
+      ITEM_TYPES.EGG,
+      ITEM_TYPES.BREAD,
+      ITEM_TYPES.APPLE,
+      ITEM_TYPES.GOLDEN_APPLE,
+      ITEM_TYPES.MELON_SLICE,
+      ITEM_TYPES.MUSHROOM_STEW,
+      BLOCK_TYPES.AMETHYST,
+      BLOCK_TYPES.MAGMA,
+      BLOCK_TYPES.GLOWSTONE,
+      BLOCK_TYPES.OBSIDIAN,
+      BLOCK_TYPES.DEEPSLATE,
       BLOCK_TYPES.COAL_ORE,
       BLOCK_TYPES.IRON_ORE,
       BLOCK_TYPES.GOLD_ORE,
       BLOCK_TYPES.DIAMOND_ORE,
+      ITEM_TYPES.WATER_BUCKET,
+      ITEM_TYPES.BUCKET,
+      ITEM_TYPES.AMETHYST_SHARD,
       ITEM_TYPES.DIAMOND,
       ITEM_TYPES.GOLD_INGOT,
       ITEM_TYPES.IRON_INGOT,
       ITEM_TYPES.COAL,
       ITEM_TYPES.STICK,
-      ITEM_TYPES.BREAD,
-      ITEM_TYPES.APPLE,
     ],
   },
   {
@@ -119,6 +169,8 @@ const CREATIVE_ITEM_CATEGORIES: CreativeCategory[] = [
       ITEM_TYPES.WOOD_SWORD,
       ITEM_TYPES.WOOD_PICKAXE,
       ITEM_TYPES.STONE_PICKAXE,
+      ITEM_TYPES.WATER_BUCKET,
+      ITEM_TYPES.BUCKET,
     ],
   },
   {
@@ -153,13 +205,12 @@ const ALL_CREATIVE_ITEM_IDS: number[] = [
 ];
 
 const SPLASH_TEXTS = [
-  'Now with 3D Steve & First-Person Arm!',
+  'Now with 8 Procedural Biomes!',
+  'Badlands Mesas, Roofed Forests & Swamps!',
+  'Realistic Water Flow Physics & Swimming!',
+  '3D Spinning Item Drops & Pickups!',
+  'Giant Mushrooms, Amethyst & Magma Blocks!',
   'Press F5 for Third-Person Perspective!',
-  'Infinite Procedural Voxel Biomes!',
-  'Underwater Coral Reefs & Kelp Forests!',
-  'Dynamic Rain, Thunder & Snow Weather!',
-  'Iron & Diamond Armor Sets with HUD!',
-  'Diamond Pickaxes & Swords included!',
   '100% Vanilla WebGL & Three.js!',
   'Mining, Crafting & Exploring!',
   'Java Edition Inspired Voxel World!'
@@ -178,6 +229,79 @@ function safeRequestPointerLock(element?: HTMLElement | null) {
     // Silently catch synchronous errors
   }
 }
+
+// Minecraft Roast Shank / Drumstick icon renderer
+const HungerDrumstick: React.FC<{
+  state: 'full' | 'half' | 'empty';
+  isRegen?: boolean;
+  isLow?: boolean;
+}> = ({ state, isRegen, isLow }) => {
+  return (
+    <div
+      className={`relative w-3.5 h-3.5 flex items-center justify-center ${
+        isLow ? 'animate-bounce' : ''
+      }`}
+    >
+      <svg
+        viewBox="0 0 16 16"
+        className={`w-3.5 h-3.5 ${
+          isRegen ? 'drop-shadow-[0_0_2px_rgba(245,158,11,0.8)]' : ''
+        }`}
+      >
+        {state === 'empty' && (
+          <g opacity="0.35">
+            <path
+              d="M12 2a1 1 0 0 0-1 1v1.1l-2.6 2.6A4.5 4.5 0 0 0 3 11a4.5 4.5 0 0 0 4.3 4.3 4.5 4.5 0 0 0 4.3-5.4L14.2 7.3A1 1 0 0 0 15 6V3a1 1 0 0 0-1-1h-2z"
+              fill="#18120c"
+              stroke="rgba(255,255,255,0.2)"
+              strokeWidth="0.8"
+            />
+          </g>
+        )}
+        {state === 'half' && (
+          <g>
+            <path
+              d="M12 2a1 1 0 0 0-1 1v1.1l-2.6 2.6A4.5 4.5 0 0 0 3 11a4.5 4.5 0 0 0 4.3 4.3 4.5 4.5 0 0 0 4.3-5.4L14.2 7.3A1 1 0 0 0 15 6V3a1 1 0 0 0-1-1h-2z"
+              fill="#1a110a"
+              stroke="#2e190a"
+              strokeWidth="0.8"
+            />
+            {/* Bone at top right */}
+            <path d="M11 2h3v3l-2.5 2.5-1.5-1.5L11 4V2z" fill="#f0ede1" stroke="#3b200b" strokeWidth="0.6" />
+            <circle cx="13.5" cy="2" r="1" fill="#fff" />
+            {/* Half meat on right side */}
+            <path
+              d="M8 8l3.5 3.5a3.5 3.5 0 0 1-2.5 2.5V8.5L8 8z"
+              fill="#c2631a"
+              stroke="#3b200b"
+              strokeWidth="0.6"
+            />
+            <path d="M9 10l2 2" stroke="#f59e0b" strokeWidth="0.8" />
+          </g>
+        )}
+        {state === 'full' && (
+          <g>
+            {/* Bone handle */}
+            <path d="M11 1.5h3.5v3.5l-2.5 2.5-2-2 2-3V1.5z" fill="#ecebe4" stroke="#371d07" strokeWidth="0.6" />
+            <circle cx="14" cy="2" r="1.2" fill="#ffffff" />
+            <circle cx="12.2" cy="1.2" r="0.9" fill="#e2decb" />
+            {/* Roasted meat */}
+            <path
+              d="M3 10.5C2.5 8 4 6 6 5.5l3.5 3.5C8 12.5 5 13 3 10.5z"
+              fill="#b45309"
+              stroke="#3a1c06"
+              strokeWidth="0.8"
+            />
+            <ellipse cx="6.5" cy="9.5" rx="3.5" ry="3.2" fill="#c2631a" transform="rotate(-30 6.5 9.5)" />
+            {/* Golden roast highlight */}
+            <ellipse cx="5.5" cy="8.8" rx="1.8" ry="1.2" fill="#f59e0b" transform="rotate(-30 5.5 8.8)" />
+            <circle cx="5" cy="8.5" r="0.6" fill="#fef08a" />
+          </g>
+        )}
+      </svg>
+    </div>
+  );
+};
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -199,6 +323,8 @@ export default function App() {
     isLocked: false,
     health: 100,
     oxygen: 100,
+    hunger: 20,
+    maxHunger: 20,
     isSubmerged: false,
     inWater: false,
     perspectiveMode: 0,
@@ -208,12 +334,14 @@ export default function App() {
     gameMode: 'survival',
     difficulty: 'normal',
     isFlying: false,
+    biomeName: 'Lush Forest & Plains',
   });
 
   const [inventorySlots, setInventorySlots] = useState<(ItemStack | null)[]>([]);
   const [armorSlots, setArmorSlots] = useState<(ItemStack | null)[]>([null, null, null, null]);
   const [selectedHotbarIndex, setSelectedHotbarIndex] = useState<number>(0);
   const [showInventory, setShowInventory] = useState<boolean>(false);
+  const [showFurnace, setShowFurnace] = useState<boolean>(false);
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [showAudioSettings, setShowAudioSettings] = useState<boolean>(false);
   const [audioSettings, setAudioSettings] = useState(() => sounds.getSettings());
@@ -228,6 +356,9 @@ export default function App() {
   // Synchronized refs to eliminate stale closures in keyboard events
   const showInventoryRef = useRef<boolean>(false);
   showInventoryRef.current = showInventory;
+
+  const showFurnaceRef = useRef<boolean>(false);
+  showFurnaceRef.current = showFurnace;
 
   const showHelpRef = useRef<boolean>(false);
   showHelpRef.current = showHelp;
@@ -258,6 +389,22 @@ export default function App() {
     }
     sounds.playInventoryToggle(true);
     setShowInventory(true);
+  };
+
+  const closeFurnace = () => {
+    setShowFurnace(false);
+    sounds.playInventoryToggle(false);
+    if (!inTitleScreenRef.current && !isPausedRef.current) {
+      safeRequestPointerLock(engineRef.current?.container.querySelector('canvas'));
+    }
+  };
+
+  const openFurnace = () => {
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+    sounds.playInventoryToggle(true);
+    setShowFurnace(true);
   };
 
   // Sync audio settings
@@ -291,6 +438,9 @@ export default function App() {
       setSelectedHotbarIndex(engine.inventory.selectedHotbarIndex);
       setArmorSlots([...engine.inventory.armorSlots]);
     });
+    engine.onOpenFurnace = () => {
+      openFurnace();
+    };
     engine.setPanoramaMode(true);
     engineRef.current = engine;
     refreshInventory();
@@ -313,7 +463,9 @@ export default function App() {
 
       if (e.code === 'KeyE') {
         e.preventDefault();
-        if (showInventoryRef.current) {
+        if (showFurnaceRef.current) {
+          closeFurnace();
+        } else if (showInventoryRef.current) {
           closeInventory();
         } else if (!inTitleScreenRef.current && !isPausedRef.current) {
           openInventory();
@@ -330,6 +482,12 @@ export default function App() {
       }
 
       if (e.code === 'Escape') {
+        if (showFurnaceRef.current) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeFurnace();
+          return;
+        }
         if (showInventoryRef.current) {
           e.preventDefault();
           e.stopPropagation();
@@ -395,6 +553,7 @@ export default function App() {
     if (document.pointerLockElement) document.exitPointerLock();
     setIsPaused(false);
     setShowInventory(false);
+    setShowFurnace(false);
     setShowHelp(false);
     setShowAudioSettings(false);
     setInTitleScreen(true);
@@ -471,6 +630,10 @@ export default function App() {
       case BLOCK_TYPES.CACTUS: return atlas.cactus;
       case BLOCK_TYPES.CHERRY_LEAVES: return atlas.cherryLeaves;
       case BLOCK_TYPES.RED_SAND: return atlas.redSand;
+      case BLOCK_TYPES.FURNACE: return atlas.furnaceFront;
+      case BLOCK_TYPES.FURNACE_LIT: return atlas.furnaceFrontLit;
+      case BLOCK_TYPES.SPRUCE_WOOD: return atlas.spruceWood;
+      case BLOCK_TYPES.SPRUCE_LEAVES: return atlas.spruceLeaves;
       default: return atlas.dirt;
     }
   };
@@ -521,7 +684,13 @@ export default function App() {
     sounds.playUIClick();
     const mob = engineRef.current.spawnMob(type);
     if (mob) {
-      setCraftingFeedback(type === 'sheep' ? 'Spawned Passive Sheep 🐑' : 'Spawned Zombie 🧟');
+      setCraftingFeedback(
+        type === 'sheep'
+          ? 'Spawned Passive Sheep 🐑'
+          : type === 'creeper'
+          ? 'Spawned Creeper 🧨'
+          : 'Spawned Zombie 🧟'
+      );
     } else {
       setCraftingFeedback('Hostile mobs cannot spawn in Peaceful mode!');
     }
@@ -535,7 +704,7 @@ export default function App() {
     const armorInfo = ARMOR_DATA[item.id];
     if (!armorInfo) return;
 
-    const res = engineRef.current.inventory.equipArmorItem(fromSlotIndex);
+    const res = engineRef.current.inventory.equipArmorItem(item);
     if (res.success) {
       sounds.playArmorEquip(armorInfo.tier);
       engineRef.current.updateArmorVisuals();
@@ -894,6 +1063,15 @@ export default function App() {
               <span>🧟</span>
               <span className="hidden lg:inline text-[11px]">Zombie</span>
             </button>
+            <button
+              id="btn-spawn-creeper"
+              onClick={() => handleSpawnMob('creeper')}
+              className="px-2 py-1 hover:bg-white/15 rounded text-xs text-white/90 hover:text-white transition cursor-pointer flex items-center gap-1"
+              title="Spawn Hostile Creeper Mob (hisses & explodes!)"
+            >
+              <span>🧨</span>
+              <span className="hidden lg:inline text-[11px]">Creeper</span>
+            </button>
           </div>
 
           {/* Perspective Mode Toggle */}
@@ -938,6 +1116,23 @@ export default function App() {
           >
             <Package className="w-3.5 h-3.5 text-amber-300" />
             <span>Inventory [E]</span>
+          </button>
+
+          <button
+            id="btn-hud-furnace"
+            onClick={() => {
+              if (showFurnace) closeFurnace();
+              else openFurnace();
+            }}
+            className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition shadow flex items-center gap-1.5 cursor-pointer backdrop-blur-md ${
+              showFurnace
+                ? 'bg-amber-600/90 border-amber-400 text-white'
+                : 'bg-[#0e121c]/80 hover:bg-[#1a2236]/90 border-white/10 text-white/90 hover:text-white'
+            }`}
+            title="Open Furnace (Cook & Smelt)"
+          >
+            <ChefHat className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Furnace</span>
           </button>
 
           <button
@@ -1198,23 +1393,32 @@ export default function App() {
               </div>
 
               {/* Mob Spawner row */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   id="btn-pause-spawn-sheep"
                   onClick={() => handleSpawnMob('sheep')}
-                  className="py-2 px-3 bg-[#334233] hover:bg-[#435743] active:bg-[#253225] border-t border-l border-[#628162] border-b-2 border-r-2 border-[#182318] text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  className="py-2 px-2 bg-[#334233] hover:bg-[#435743] active:bg-[#253225] border-t border-l border-[#628162] border-b-2 border-r-2 border-[#182318] text-white font-bold text-[11px] tracking-wider uppercase flex items-center justify-center gap-1 cursor-pointer transition-colors"
                 >
                   <span>🐑</span>
-                  <span>Spawn Sheep</span>
+                  <span>Sheep</span>
                 </button>
 
                 <button
                   id="btn-pause-spawn-zombie"
                   onClick={() => handleSpawnMob('zombie')}
-                  className="py-2 px-3 bg-[#443333] hover:bg-[#574343] active:bg-[#322525] border-t border-l border-[#816262] border-b-2 border-r-2 border-[#231818] text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  className="py-2 px-2 bg-[#443333] hover:bg-[#574343] active:bg-[#322525] border-t border-l border-[#816262] border-b-2 border-r-2 border-[#231818] text-white font-bold text-[11px] tracking-wider uppercase flex items-center justify-center gap-1 cursor-pointer transition-colors"
                 >
                   <span>🧟</span>
-                  <span>Spawn Zombie</span>
+                  <span>Zombie</span>
+                </button>
+
+                <button
+                  id="btn-pause-spawn-creeper"
+                  onClick={() => handleSpawnMob('creeper')}
+                  className="py-2 px-2 bg-[#2d442d] hover:bg-[#3b593b] active:bg-[#1e2e1e] border-t border-l border-[#528052] border-b-2 border-r-2 border-[#162316] text-white font-bold text-[11px] tracking-wider uppercase flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                >
+                  <span>🧨</span>
+                  <span>Creeper</span>
                 </button>
               </div>
 
@@ -1527,7 +1731,7 @@ export default function App() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {CRAFTING_RECIPES.map((recipe) => {
                     const isCreative = stats.gameMode === 'creative';
-                    const canCraft = isCreative || engineRef.current?.inventory.hasIngredients(recipe.ingredients);
+                    const canCraft = isCreative || !!engineRef.current?.inventory.hasIngredients(recipe);
                     const resultDef = ITEM_DEFINITIONS[recipe.result.id];
                     const resultIcon = getItemIcon(recipe.result.id);
 
@@ -1788,7 +1992,8 @@ export default function App() {
       {!isInitialLoading && !inTitleScreen && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1.5 pointer-events-none">
         {/* Status Bars Container */}
-        <div className="flex flex-col gap-1 w-full max-w-[340px] px-1">
+        {/* Status Bars Container (Minecraft Java Symmetrical HUD) */}
+        <div className="flex flex-col gap-1 w-full max-w-[420px] px-1">
           {stats.gameMode === 'creative' ? (
             <div className="flex items-center justify-between w-full bg-[#1a1710]/85 backdrop-blur-md px-3 py-1 rounded-md border border-amber-400/40 text-xs text-amber-300 font-mono shadow-md">
               <span className="flex items-center gap-1.5 font-bold">
@@ -1801,38 +2006,65 @@ export default function App() {
             </div>
           ) : (
             <>
-              {/* Top row of status bars: Armor Bar (Defense Rating) */}
-              {stats.armorDefense > 0 && (
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center gap-0.5 bg-[#0e121c]/70 backdrop-blur-sm px-2 py-0.5 rounded-md border border-cyan-400/30">
-                    {Array.from({ length: 10 }).map((_, idx) => {
-                      const points = stats.armorDefense;
-                      const isFull = (idx + 1) * 2 <= points;
-                      const isHalf = idx * 2 + 1 === points;
-                      return (
-                        <Shield
-                          key={idx}
-                          className={`w-3.5 h-3.5 ${
-                            isFull
-                              ? 'text-cyan-400 fill-cyan-400'
-                              : isHalf
-                              ? 'text-cyan-400 fill-cyan-400/50'
-                              : 'text-white/20'
-                          }`}
-                        />
-                      );
-                    })}
-                    <span className="text-[10px] font-mono font-bold text-cyan-300 ml-1">
-                      {stats.armorDefense}
-                    </span>
-                  </div>
+              {/* Top row of status bars: Armor Bar (Left) & Oxygen Bubbles (Right) */}
+              {((stats.armorDefense > 0) || (stats.isSubmerged || stats.inWater || stats.oxygen < 100)) && (
+                <div className="flex items-center justify-between w-full px-0.5">
+                  {/* Left: Armor Bar */}
+                  {stats.armorDefense > 0 ? (
+                    <div className="flex items-center gap-0.5 bg-[#0e121c]/70 backdrop-blur-sm px-2 py-0.5 rounded-md border border-cyan-400/30">
+                      {Array.from({ length: 10 }).map((_, idx) => {
+                        const points = stats.armorDefense;
+                        const isFull = (idx + 1) * 2 <= points;
+                        const isHalf = idx * 2 + 1 === points;
+                        return (
+                          <Shield
+                            key={idx}
+                            className={`w-3.5 h-3.5 ${
+                              isFull
+                                ? 'text-cyan-400 fill-cyan-400'
+                                : isHalf
+                                ? 'text-cyan-400 fill-cyan-400/50'
+                                : 'text-white/20'
+                            }`}
+                          />
+                        );
+                      })}
+                      <span className="text-[10px] font-mono font-bold text-cyan-300 ml-1">
+                        {stats.armorDefense}
+                      </span>
+                    </div>
+                  ) : <div />}
+
+                  {/* Right: Bubbles (Oxygen) */}
+                  {(stats.isSubmerged || stats.inWater || stats.oxygen < 100) ? (
+                    <div className="flex items-center gap-0.5 bg-[#0e121c]/70 backdrop-blur-sm px-2 py-0.5 rounded-md border border-cyan-400/30 animate-pulse">
+                      {Array.from({ length: 10 }).map((_, idx) => {
+                        const hasAir = idx < oxygenBubbles;
+                        return (
+                          <Droplets
+                            key={idx}
+                            className={`w-3.5 h-3.5 ${
+                              hasAir ? 'text-cyan-400 fill-cyan-400' : 'text-white/15'
+                            }`}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : <div />}
                 </div>
               )}
 
-              {/* Health & Oxygen Status Bars */}
-              <div className="flex items-center justify-between w-full">
+              {/* Bottom row of status bars: Health (Left) & Hunger (Right) */}
+              <div className="flex items-center justify-between w-full px-0.5">
                 {/* Hearts (Health) */}
-                <div className="flex items-center gap-0.5 bg-[#0e121c]/70 backdrop-blur-sm px-2 py-1 rounded-md border border-white/10">
+                <div
+                  className={`flex items-center gap-0.5 bg-[#0e121c]/70 backdrop-blur-sm px-2 py-1 rounded-md border transition-all ${
+                    stats.hunger >= 18 && stats.health < 100
+                      ? 'border-emerald-400/50 shadow-[0_0_8px_rgba(52,211,153,0.3)]'
+                      : 'border-white/10'
+                  }`}
+                  title={`Health: ${stats.health}/100${stats.hunger >= 18 && stats.health < 100 ? ' (Regenerating)' : ''}`}
+                >
                   {Array.from({ length: 10 }).map((_, idx) => {
                     const isFilled = idx < fullHearts;
                     const isHalf = idx === fullHearts && hasHalfHeart;
@@ -1852,22 +2084,31 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Bubbles (Oxygen) - Only shown when in water or submerged or recovering */}
-                {(stats.isSubmerged || stats.inWater || stats.oxygen < 100) && (
-                  <div className="flex items-center gap-0.5 bg-[#0e121c]/70 backdrop-blur-sm px-2 py-1 rounded-md border border-cyan-400/30 animate-pulse">
-                    {Array.from({ length: 10 }).map((_, idx) => {
-                      const hasAir = idx < oxygenBubbles;
-                      return (
-                        <Droplets
-                          key={idx}
-                          className={`w-3.5 h-3.5 ${
-                            hasAir ? 'text-cyan-400 fill-cyan-400' : 'text-white/15'
-                          }`}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
+                {/* Hunger Bar (10 Drumsticks / Roast Shanks) */}
+                <div
+                  className={`flex items-center gap-0.5 bg-[#0e121c]/70 backdrop-blur-sm px-2 py-1 rounded-md border transition-all ${
+                    stats.hunger >= 18 && stats.health < 100
+                      ? 'border-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]'
+                      : stats.hunger <= 6
+                      ? 'border-red-500/50 bg-red-950/20 animate-pulse'
+                      : 'border-white/10'
+                  }`}
+                  title={`Hunger: ${stats.hunger} / ${stats.maxHunger}${stats.hunger >= 18 && stats.health < 100 ? ' (Health Regenerating)' : stats.hunger <= 6 ? ' (Low Hunger - Cannot Sprint)' : ''}`}
+                >
+                  {Array.from({ length: 10 }).map((_, idx) => {
+                    const drumstickPoints = stats.hunger - idx * 2;
+                    const fillState = drumstickPoints >= 2 ? 'full' : drumstickPoints === 1 ? 'half' : 'empty';
+
+                    return (
+                      <HungerDrumstick
+                        key={idx}
+                        state={fillState}
+                        isRegen={stats.hunger >= 18 && stats.health < 100}
+                        isLow={stats.hunger <= 6 && fillState !== 'empty'}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             </>
           )}
@@ -1934,6 +2175,15 @@ export default function App() {
         </div>
       </div>
       )}
+
+      {/* Furnace Cooking & Smelting Modal */}
+      <FurnaceModal
+        isOpen={showFurnace}
+        onClose={closeFurnace}
+        inventory={engineRef.current ? engineRef.current.inventory : null}
+        onInventoryChange={refreshInventory}
+        getItemIcon={getItemIcon}
+      />
 
       {/* Audio & Nature Settings Modal */}
       <SoundSettingsModal

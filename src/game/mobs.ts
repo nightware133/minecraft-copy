@@ -3,7 +3,7 @@ import { VoxelWorld, BLOCK_TYPES } from './world';
 import { ITEM_TYPES, InventorySystem } from './inventory';
 import { sounds } from './audio';
 
-export type MobType = 'sheep' | 'zombie';
+export type MobType = 'sheep' | 'zombie' | 'cow' | 'pig' | 'chicken' | 'polar_bear' | 'creeper';
 
 export type GameDifficulty = 'peaceful' | 'easy' | 'normal' | 'hard';
 export type GameMode = 'survival' | 'creative';
@@ -28,7 +28,7 @@ function createPixelTexture(
   return texture;
 }
 
-// Cached textures for sheep and zombie to optimize performance
+// Cached textures for mobs
 let sheepHeadTex: THREE.CanvasTexture | null = null;
 let sheepWoolTex: THREE.CanvasTexture | null = null;
 let sheepLegTex: THREE.CanvasTexture | null = null;
@@ -38,33 +38,50 @@ let zombieSkinTex: THREE.CanvasTexture | null = null;
 let zombieShirtTex: THREE.CanvasTexture | null = null;
 let zombiePantsTex: THREE.CanvasTexture | null = null;
 
+let cowHeadTex: THREE.CanvasTexture | null = null;
+let cowBodyTex: THREE.CanvasTexture | null = null;
+let cowLegTex: THREE.CanvasTexture | null = null;
+
+let pigHeadTex: THREE.CanvasTexture | null = null;
+let pigBodyTex: THREE.CanvasTexture | null = null;
+let pigLegTex: THREE.CanvasTexture | null = null;
+
+let chickenHeadTex: THREE.CanvasTexture | null = null;
+let chickenBodyTex: THREE.CanvasTexture | null = null;
+let chickenWingTex: THREE.CanvasTexture | null = null;
+let chickenLegTex: THREE.CanvasTexture | null = null;
+
+let polarBearHeadTex: THREE.CanvasTexture | null = null;
+let polarBearBodyTex: THREE.CanvasTexture | null = null;
+let polarBearLegTex: THREE.CanvasTexture | null = null;
+
+let creeperHeadTex: THREE.CanvasTexture | null = null;
+let creeperHeadSideTex: THREE.CanvasTexture | null = null;
+let creeperBodyTex: THREE.CanvasTexture | null = null;
+let creeperLegTex: THREE.CanvasTexture | null = null;
+
 function getSheepTextures() {
   if (!sheepHeadTex) {
-    // Sheep face
     sheepHeadTex = createPixelTexture(8, 8, (ctx) => {
       ctx.fillStyle = '#e8e5dc'; // Wool top
       ctx.fillRect(0, 0, 8, 2);
       ctx.fillStyle = '#dcd4c5'; // Face base
       ctx.fillRect(0, 2, 8, 6);
-      // Eyes
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 3, 2, 1);
       ctx.fillRect(6, 3, 2, 1);
       ctx.fillStyle = '#1c1b18';
       ctx.fillRect(1, 3, 1, 1);
       ctx.fillRect(6, 3, 1, 1);
-      // Pink muzzle
       ctx.fillStyle = '#f0b0b8';
       ctx.fillRect(3, 5, 2, 2);
       ctx.fillStyle = '#cf8692';
       ctx.fillRect(3, 6, 2, 1);
     });
 
-    // Fluffy wool body texture
     sheepWoolTex = createPixelTexture(8, 8, (ctx) => {
       ctx.fillStyle = '#f2f0e8';
       ctx.fillRect(0, 0, 8, 8);
-      // Subtle pixel wool shading
       ctx.fillStyle = '#dedbd0';
       ctx.fillRect(1, 1, 2, 2);
       ctx.fillRect(5, 2, 2, 2);
@@ -75,15 +92,177 @@ function getSheepTextures() {
       ctx.fillRect(3, 6, 1, 1);
     });
 
-    // Legs
     sheepLegTex = createPixelTexture(4, 4, (ctx) => {
       ctx.fillStyle = '#cfc7b4';
       ctx.fillRect(0, 0, 4, 3);
-      ctx.fillStyle = '#6b6354'; // Hooves
+      ctx.fillStyle = '#6b6354';
       ctx.fillRect(0, 3, 4, 1);
     });
   }
   return { head: sheepHeadTex, wool: sheepWoolTex, leg: sheepLegTex };
+}
+
+function getCowTextures() {
+  if (!cowHeadTex) {
+    cowHeadTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#5c3a21'; // Brown fur
+      ctx.fillRect(0, 0, 8, 8);
+      // Horns
+      ctx.fillStyle = '#9e9e9e';
+      ctx.fillRect(0, 0, 1, 2);
+      ctx.fillRect(7, 0, 1, 2);
+      // White forehead patch
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(3, 1, 2, 3);
+      // Eyes
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(1, 3, 2, 1);
+      ctx.fillRect(5, 3, 2, 1);
+      ctx.fillStyle = '#111111';
+      ctx.fillRect(2, 3, 1, 1);
+      ctx.fillRect(5, 3, 1, 1);
+      // Gray snout muzzle
+      ctx.fillStyle = '#757575';
+      ctx.fillRect(2, 5, 4, 3);
+      ctx.fillStyle = '#424242';
+      ctx.fillRect(2, 6, 1, 1);
+      ctx.fillRect(5, 6, 1, 1);
+    });
+
+    cowBodyTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#5c3a21';
+      ctx.fillRect(0, 0, 8, 8);
+      // White cow spots
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(1, 1, 3, 2);
+      ctx.fillRect(4, 4, 3, 3);
+      ctx.fillRect(0, 5, 2, 2);
+    });
+
+    cowLegTex = createPixelTexture(4, 4, (ctx) => {
+      ctx.fillStyle = '#5c3a21';
+      ctx.fillRect(0, 0, 4, 3);
+      ctx.fillStyle = '#332114';
+      ctx.fillRect(0, 3, 4, 1);
+    });
+  }
+  return { head: cowHeadTex, body: cowBodyTex, leg: cowLegTex };
+}
+
+function getPigTextures() {
+  if (!pigHeadTex) {
+    pigHeadTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#f48fb1'; // Pink
+      ctx.fillRect(0, 0, 8, 8);
+      // Eyes
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(1, 3, 2, 1);
+      ctx.fillRect(5, 3, 2, 1);
+      ctx.fillStyle = '#212121';
+      ctx.fillRect(1, 3, 1, 1);
+      ctx.fillRect(6, 3, 1, 1);
+      // Snout
+      ctx.fillStyle = '#ec407a';
+      ctx.fillRect(2, 4, 4, 3);
+      ctx.fillStyle = '#ad1457';
+      ctx.fillRect(3, 5, 1, 1);
+      ctx.fillRect(4, 5, 1, 1);
+    });
+
+    pigBodyTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#f48fb1';
+      ctx.fillRect(0, 0, 8, 8);
+      ctx.fillStyle = '#ec407a';
+      ctx.fillRect(2, 2, 2, 2);
+      ctx.fillRect(5, 4, 2, 2);
+    });
+
+    pigLegTex = createPixelTexture(4, 4, (ctx) => {
+      ctx.fillStyle = '#f48fb1';
+      ctx.fillRect(0, 0, 4, 3);
+      ctx.fillStyle = '#c2185b';
+      ctx.fillRect(0, 3, 4, 1);
+    });
+  }
+  return { head: pigHeadTex, body: pigBodyTex, leg: pigLegTex };
+}
+
+function getChickenTextures() {
+  if (!chickenHeadTex) {
+    chickenHeadTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 8, 8);
+      // Eyes
+      ctx.fillStyle = '#212121';
+      ctx.fillRect(2, 2, 1, 1);
+      ctx.fillRect(5, 2, 1, 1);
+      // Yellow Beak
+      ctx.fillStyle = '#ffb300';
+      ctx.fillRect(3, 3, 2, 2);
+      // Red Wattle
+      ctx.fillStyle = '#d32f2f';
+      ctx.fillRect(3, 5, 2, 2);
+    });
+
+    chickenBodyTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 8, 8);
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(1, 2, 2, 2);
+      ctx.fillRect(5, 4, 2, 2);
+    });
+
+    chickenWingTex = createPixelTexture(4, 4, (ctx) => {
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(0, 0, 4, 4);
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(0, 2, 4, 2);
+    });
+
+    chickenLegTex = createPixelTexture(4, 4, (ctx) => {
+      ctx.fillStyle = '#ffb300';
+      ctx.fillRect(1, 0, 2, 4);
+    });
+  }
+  return { head: chickenHeadTex, body: chickenBodyTex, wing: chickenWingTex, leg: chickenLegTex };
+}
+
+function getPolarBearTextures() {
+  if (!polarBearHeadTex) {
+    polarBearHeadTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(0, 0, 8, 8);
+      // Eyes
+      ctx.fillStyle = '#212121';
+      ctx.fillRect(1, 3, 1, 1);
+      ctx.fillRect(6, 3, 1, 1);
+      // Black snout
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(2, 4, 4, 3);
+      ctx.fillStyle = '#212121';
+      ctx.fillRect(3, 4, 2, 2);
+      // Ears
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(0, 0, 2, 1);
+      ctx.fillRect(6, 0, 2, 1);
+    });
+
+    polarBearBodyTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(0, 0, 8, 8);
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(2, 1, 3, 2);
+      ctx.fillRect(4, 4, 3, 2);
+    });
+
+    polarBearLegTex = createPixelTexture(4, 4, (ctx) => {
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(0, 0, 4, 4);
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(0, 3, 4, 1);
+    });
+  }
+  return { head: polarBearHeadTex, body: polarBearBodyTex, leg: polarBearLegTex };
 }
 
 function getZombieTextures() {
@@ -136,6 +315,75 @@ function getZombieTextures() {
   return { head: zombieHeadTex, skin: zombieSkinTex, shirt: zombieShirtTex, pants: zombiePantsTex };
 }
 
+function getCreeperTextures() {
+  if (!creeperHeadTex) {
+    // Iconic Creeper Face
+    creeperHeadTex = createPixelTexture(8, 8, (ctx) => {
+      // Mottled camouflage green
+      ctx.fillStyle = '#447d33';
+      ctx.fillRect(0, 0, 8, 8);
+      ctx.fillStyle = '#396d2b';
+      ctx.fillRect(0, 0, 2, 2);
+      ctx.fillRect(6, 0, 2, 2);
+      ctx.fillRect(1, 5, 1, 2);
+      ctx.fillRect(6, 5, 1, 2);
+      ctx.fillStyle = '#559c40';
+      ctx.fillRect(2, 0, 4, 1);
+      ctx.fillRect(0, 3, 1, 3);
+      ctx.fillRect(7, 3, 1, 3);
+
+      // Deep dark eyes
+      ctx.fillStyle = '#0a1407';
+      ctx.fillRect(1, 2, 2, 2);
+      ctx.fillRect(5, 2, 2, 2);
+
+      // Sad frowning mouth
+      ctx.fillRect(3, 4, 2, 2); // Center bridge
+      ctx.fillRect(2, 5, 4, 1); // Upper mouth bar
+      ctx.fillRect(2, 6, 1, 2); // Left droop
+      ctx.fillRect(5, 6, 1, 2); // Right droop
+    });
+
+    creeperHeadSideTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#447d33';
+      ctx.fillRect(0, 0, 8, 8);
+      ctx.fillStyle = '#38692a';
+      ctx.fillRect(1, 1, 2, 2);
+      ctx.fillRect(5, 4, 2, 2);
+      ctx.fillStyle = '#559c40';
+      ctx.fillRect(4, 1, 2, 2);
+      ctx.fillRect(1, 5, 2, 2);
+    });
+
+    creeperBodyTex = createPixelTexture(8, 8, (ctx) => {
+      ctx.fillStyle = '#447d33';
+      ctx.fillRect(0, 0, 8, 8);
+      ctx.fillStyle = '#38692a';
+      ctx.fillRect(2, 2, 2, 2);
+      ctx.fillRect(5, 5, 2, 2);
+      ctx.fillStyle = '#559c40';
+      ctx.fillRect(0, 1, 2, 2);
+      ctx.fillRect(4, 1, 2, 2);
+      ctx.fillRect(1, 6, 3, 1);
+    });
+
+    creeperLegTex = createPixelTexture(4, 4, (ctx) => {
+      ctx.fillStyle = '#447d33';
+      ctx.fillRect(0, 0, 4, 3);
+      ctx.fillStyle = '#38692a';
+      ctx.fillRect(1, 0, 2, 2);
+      ctx.fillStyle = '#183013'; // Claws
+      ctx.fillRect(0, 3, 4, 1);
+    });
+  }
+  return {
+    head: creeperHeadTex,
+    headSide: creeperHeadSideTex,
+    body: creeperBodyTex,
+    leg: creeperLegTex,
+  };
+}
+
 // Particle emitter for mob hit and death puffs
 export class MobParticleSystem {
   group: THREE.Group;
@@ -144,6 +392,54 @@ export class MobParticleSystem {
   constructor(scene: THREE.Scene) {
     this.group = new THREE.Group();
     scene.add(this.group);
+  }
+
+  // Dramatic Explosion Shockwave & Smoke
+  spawnExplosionEffect(pos: THREE.Vector3) {
+    // 1. Heavy smoke clouds
+    const smokeCount = 36;
+    const smokeGeom = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+    const smokeMat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.9 });
+    for (let i = 0; i < smokeCount; i++) {
+      const mesh = new THREE.Mesh(smokeGeom, smokeMat.clone());
+      mesh.position.copy(pos).add(new THREE.Vector3(
+        (Math.random() - 0.5) * 1.2,
+        Math.random() * 1.2,
+        (Math.random() - 0.5) * 1.2
+      ));
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 7.5,
+        Math.random() * 6.0 + 1.5,
+        (Math.random() - 0.5) * 7.5
+      );
+      this.group.add(mesh);
+      this.particles.push({ mesh, vel, life: 0, maxLife: 0.75 + Math.random() * 0.45 });
+    }
+
+    // 2. Blazing Fire & Sparks
+    const fireCount = 28;
+    const fireGeom = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+    for (let i = 0; i < fireCount; i++) {
+      const isYellow = Math.random() > 0.45;
+      const mat = new THREE.MeshBasicMaterial({
+        color: isYellow ? 0xffcc00 : 0xff3b00,
+        transparent: true,
+        opacity: 0.95,
+      });
+      const mesh = new THREE.Mesh(fireGeom, mat);
+      mesh.position.copy(pos).add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.8,
+        Math.random() * 0.8 + 0.2,
+        (Math.random() - 0.5) * 0.8
+      ));
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 8.5,
+        Math.random() * 7.5 + 2.0,
+        (Math.random() - 0.5) * 8.5
+      );
+      this.group.add(mesh);
+      this.particles.push({ mesh, vel, life: 0, maxLife: 0.5 + Math.random() * 0.35 });
+    }
   }
 
   // Puff of white smoke when a mob dies
@@ -431,14 +727,17 @@ export abstract class BaseMob {
 
   destroy() {
     this.damageMaterial.dispose();
+    for (const mat of this.meshMaterials.values()) {
+      if (Array.isArray(mat)) {
+        mat.forEach((m) => m.dispose());
+      } else {
+        mat.dispose();
+      }
+    }
+    this.meshMaterials.clear();
     this.group.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
-        } else {
-          child.material.dispose();
-        }
       }
     });
     if (this.group.parent) {
@@ -481,11 +780,11 @@ export class SheepMob extends BaseMob {
     this.group.add(this.bodyMesh);
     this.registerMesh(this.bodyMesh);
 
-    // 2. Head with face
+    // 2. Head with face (+Z front face at index 4, -Z back of head at index 5)
     const headMaterials = [
       woolMat, woolMat, woolMat, woolMat,
-      woolMat, // Back
-      headFaceMat, // Front Face
+      headFaceMat, // Index 4: Front Face (+Z)
+      woolMat,     // Index 5: Back of Head (-Z)
     ];
     const headGeom = new THREE.BoxGeometry(0.48, 0.48, 0.52);
     this.headMesh = new THREE.Mesh(headGeom, headMaterials);
@@ -639,11 +938,11 @@ export class ZombieMob extends BaseMob {
     const pantsMat = new THREE.MeshLambertMaterial({ map: pants });
     const headFaceMat = new THREE.MeshLambertMaterial({ map: head });
 
-    // 1. Head
+    // 1. Head (+Z front face at index 4, -Z back of head at index 5)
     const headMaterials = [
       skinMat, skinMat, skinMat, skinMat,
-      skinMat, // Back
-      headFaceMat, // Front Face
+      headFaceMat, // Index 4: Front Face (+Z)
+      skinMat,     // Index 5: Back of Head (-Z)
     ];
     const headGeom = new THREE.BoxGeometry(0.5, 0.5, 0.5);
     this.headMesh = new THREE.Mesh(headGeom, headMaterials);
@@ -793,6 +1092,732 @@ export class ZombieMob extends BaseMob {
 }
 
 // -------------------------------------------------------------
+// 3. COW MOB (Passive animal, drops Raw Beef and Leather)
+// -------------------------------------------------------------
+export class CowMob extends BaseMob {
+  private bodyMesh!: THREE.Mesh;
+  private headMesh!: THREE.Mesh;
+  private legMeshes: THREE.Mesh[] = [];
+
+  private wanderTimer: number = 0;
+  private fleeTimer: number = 0;
+  private ambientSoundTimer: number = 6 + Math.random() * 14;
+
+  constructor(id: string, pos: THREE.Vector3) {
+    super(id, 'cow', pos, 20);
+    this.width = 0.9;
+    this.height = 1.35;
+    this.buildMesh();
+  }
+
+  private buildMesh() {
+    const { head, body, leg } = getCowTextures();
+    const bodyMat = new THREE.MeshLambertMaterial({ map: body });
+    const headFaceMat = new THREE.MeshLambertMaterial({ map: head });
+    const legMat = new THREE.MeshLambertMaterial({ map: leg });
+
+    // Torso
+    const bodyGeom = new THREE.BoxGeometry(0.85, 0.75, 1.2);
+    this.bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+    this.bodyMesh.position.set(0, 0.75, 0);
+    this.group.add(this.bodyMesh);
+    this.registerMesh(this.bodyMesh);
+
+    // Head (+Z front face at index 4, -Z back of head at index 5)
+    const headMaterials = [
+      bodyMat, bodyMat, bodyMat, bodyMat,
+      headFaceMat, // Index 4: Front Face (+Z)
+      bodyMat,     // Index 5: Back of Head (-Z)
+    ];
+    const headGeom = new THREE.BoxGeometry(0.52, 0.52, 0.55);
+    this.headMesh = new THREE.Mesh(headGeom, headMaterials);
+    this.headMesh.position.set(0, 1.05, 0.72);
+    this.group.add(this.headMesh);
+    this.registerMesh(this.headMesh);
+
+    // 4 Legs
+    const legPositions = [
+      [-0.28, 0.32, 0.42],
+      [0.28, 0.32, 0.42],
+      [-0.28, 0.32, -0.42],
+      [0.28, 0.32, -0.42],
+    ];
+    const legGeom = new THREE.BoxGeometry(0.22, 0.64, 0.22);
+    for (const [lx, ly, lz] of legPositions) {
+      const legMesh = new THREE.Mesh(legGeom, legMat);
+      legMesh.position.set(lx, ly, lz);
+      this.group.add(legMesh);
+      this.legMeshes.push(legMesh);
+      this.registerMesh(legMesh);
+    }
+  }
+
+  takeDamage(amount: number, knockbackDir: THREE.Vector3) {
+    super.takeDamage(amount, knockbackDir);
+    sounds.playCowMoo();
+    sounds.playMobHit();
+    this.fleeTimer = 3.5;
+  }
+
+  updateAI(
+    dt: number,
+    world: VoxelWorld,
+    playerPos: THREE.Vector3,
+    _isDay: boolean,
+    _difficulty: GameDifficulty,
+    _onPlayerDamage: (damage: number) => void
+  ) {
+    if (this.isDead) return;
+
+    // Ambient moo
+    this.ambientSoundTimer -= dt;
+    if (this.ambientSoundTimer <= 0) {
+      const distToPlayer = this.position.distanceTo(playerPos);
+      if (distToPlayer < 24) {
+        sounds.playCowMoo();
+      }
+      this.ambientSoundTimer = 14 + Math.random() * 22;
+    }
+
+    if (this.fleeTimer > 0) {
+      this.fleeTimer -= dt;
+      const away = new THREE.Vector3().subVectors(this.position, playerPos).normalize();
+      this.rotationY = Math.atan2(away.x, away.z);
+      const speed = 4.2;
+      this.velocity.x = away.x * speed;
+      this.velocity.z = away.z * speed;
+      this.isMoving = true;
+    } else {
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        this.wanderTimer = 3 + Math.random() * 6;
+        if (Math.random() < 0.6) {
+          this.rotationY += (Math.random() - 0.5) * 2.2;
+          this.isMoving = true;
+        } else {
+          this.isMoving = false;
+        }
+      }
+
+      if (this.isMoving) {
+        const speed = 1.3;
+        this.velocity.x = -Math.sin(this.rotationY) * speed;
+        this.velocity.z = Math.cos(this.rotationY) * speed;
+      }
+    }
+
+    if (this.isMoving) {
+      this.walkCycle += dt * 5.0;
+      const swing = Math.sin(this.walkCycle) * 0.45;
+      this.legMeshes[0].rotation.x = swing;
+      this.legMeshes[1].rotation.x = -swing;
+      this.legMeshes[2].rotation.x = -swing;
+      this.legMeshes[3].rotation.x = swing;
+    } else {
+      this.legMeshes.forEach((l) => (l.rotation.x = 0));
+    }
+
+    this.updatePhysics(dt, world);
+  }
+}
+
+// -------------------------------------------------------------
+// 4. PIG MOB (Passive animal, drops Raw Porkchop)
+// -------------------------------------------------------------
+export class PigMob extends BaseMob {
+  private bodyMesh!: THREE.Mesh;
+  private headMesh!: THREE.Mesh;
+  private legMeshes: THREE.Mesh[] = [];
+
+  private wanderTimer: number = 0;
+  private fleeTimer: number = 0;
+  private ambientSoundTimer: number = 5 + Math.random() * 12;
+
+  constructor(id: string, pos: THREE.Vector3) {
+    super(id, 'pig', pos, 16);
+    this.width = 0.8;
+    this.height = 1.1;
+    this.buildMesh();
+  }
+
+  private buildMesh() {
+    const { head, body, leg } = getPigTextures();
+    const bodyMat = new THREE.MeshLambertMaterial({ map: body });
+    const headFaceMat = new THREE.MeshLambertMaterial({ map: head });
+    const legMat = new THREE.MeshLambertMaterial({ map: leg });
+
+    // Torso
+    const bodyGeom = new THREE.BoxGeometry(0.75, 0.65, 1.0);
+    this.bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+    this.bodyMesh.position.set(0, 0.62, 0);
+    this.group.add(this.bodyMesh);
+    this.registerMesh(this.bodyMesh);
+
+    // Head (+Z front face at index 4, -Z back of head at index 5)
+    const headMaterials = [
+      bodyMat, bodyMat, bodyMat, bodyMat,
+      headFaceMat, // Index 4: Front Face (+Z)
+      bodyMat,     // Index 5: Back of Head (-Z)
+    ];
+    const headGeom = new THREE.BoxGeometry(0.48, 0.48, 0.48);
+    this.headMesh = new THREE.Mesh(headGeom, headMaterials);
+    this.headMesh.position.set(0, 0.86, 0.6);
+
+    // 3D Snout protrusion
+    const snoutGeom = new THREE.BoxGeometry(0.24, 0.16, 0.12);
+    const snoutMat = new THREE.MeshLambertMaterial({ color: 0xec407a });
+    const snoutMesh = new THREE.Mesh(snoutGeom, snoutMat);
+    snoutMesh.position.set(0, -0.06, 0.28);
+    this.headMesh.add(snoutMesh);
+
+    this.group.add(this.headMesh);
+    this.registerMesh(this.headMesh);
+
+    // 4 Legs
+    const legPositions = [
+      [-0.24, 0.25, 0.35],
+      [0.24, 0.25, 0.35],
+      [-0.24, 0.25, -0.35],
+      [0.24, 0.25, -0.35],
+    ];
+    const legGeom = new THREE.BoxGeometry(0.2, 0.5, 0.2);
+    for (const [lx, ly, lz] of legPositions) {
+      const legMesh = new THREE.Mesh(legGeom, legMat);
+      legMesh.position.set(lx, ly, lz);
+      this.group.add(legMesh);
+      this.legMeshes.push(legMesh);
+      this.registerMesh(legMesh);
+    }
+  }
+
+  takeDamage(amount: number, knockbackDir: THREE.Vector3) {
+    super.takeDamage(amount, knockbackDir);
+    sounds.playPigOink();
+    sounds.playMobHit();
+    this.fleeTimer = 3.5;
+  }
+
+  updateAI(
+    dt: number,
+    world: VoxelWorld,
+    playerPos: THREE.Vector3,
+    _isDay: boolean,
+    _difficulty: GameDifficulty,
+    _onPlayerDamage: (damage: number) => void
+  ) {
+    if (this.isDead) return;
+
+    // Ambient oink
+    this.ambientSoundTimer -= dt;
+    if (this.ambientSoundTimer <= 0) {
+      const distToPlayer = this.position.distanceTo(playerPos);
+      if (distToPlayer < 24) {
+        sounds.playPigOink();
+      }
+      this.ambientSoundTimer = 10 + Math.random() * 18;
+    }
+
+    if (this.fleeTimer > 0) {
+      this.fleeTimer -= dt;
+      const away = new THREE.Vector3().subVectors(this.position, playerPos).normalize();
+      this.rotationY = Math.atan2(away.x, away.z);
+      const speed = 4.4;
+      this.velocity.x = away.x * speed;
+      this.velocity.z = away.z * speed;
+      this.isMoving = true;
+    } else {
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        this.wanderTimer = 3 + Math.random() * 5;
+        if (Math.random() < 0.65) {
+          this.rotationY += (Math.random() - 0.5) * 2.0;
+          this.isMoving = true;
+        } else {
+          this.isMoving = false;
+        }
+      }
+
+      if (this.isMoving) {
+        const speed = 1.4;
+        this.velocity.x = -Math.sin(this.rotationY) * speed;
+        this.velocity.z = Math.cos(this.rotationY) * speed;
+      }
+    }
+
+    if (this.isMoving) {
+      this.walkCycle += dt * 6.0;
+      const swing = Math.sin(this.walkCycle) * 0.45;
+      this.legMeshes[0].rotation.x = swing;
+      this.legMeshes[1].rotation.x = -swing;
+      this.legMeshes[2].rotation.x = -swing;
+      this.legMeshes[3].rotation.x = swing;
+    } else {
+      this.legMeshes.forEach((l) => (l.rotation.x = 0));
+    }
+
+    this.updatePhysics(dt, world);
+  }
+}
+
+// -------------------------------------------------------------
+// 5. CHICKEN MOB (Passive animal, drops Raw Chicken & Feathers)
+// -------------------------------------------------------------
+export class ChickenMob extends BaseMob {
+  private bodyMesh!: THREE.Mesh;
+  private headMesh!: THREE.Mesh;
+  private leftWingMesh!: THREE.Mesh;
+  private rightWingMesh!: THREE.Mesh;
+  private legMeshes: THREE.Mesh[] = [];
+
+  private wanderTimer: number = 0;
+  private fleeTimer: number = 0;
+  private ambientSoundTimer: number = 4 + Math.random() * 10;
+  private flapCycle: number = 0;
+
+  constructor(id: string, pos: THREE.Vector3) {
+    super(id, 'chicken', pos, 8);
+    this.width = 0.5;
+    this.height = 0.75;
+    this.buildMesh();
+  }
+
+  private buildMesh() {
+    const { head, body, wing, leg } = getChickenTextures();
+    const bodyMat = new THREE.MeshLambertMaterial({ map: body });
+    const headFaceMat = new THREE.MeshLambertMaterial({ map: head });
+    const wingMat = new THREE.MeshLambertMaterial({ map: wing });
+    const legMat = new THREE.MeshLambertMaterial({ map: leg });
+
+    // Torso
+    const bodyGeom = new THREE.BoxGeometry(0.42, 0.4, 0.52);
+    this.bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+    this.bodyMesh.position.set(0, 0.42, 0);
+    this.group.add(this.bodyMesh);
+    this.registerMesh(this.bodyMesh);
+
+    // Head (+Z front face at index 4, -Z back of head at index 5)
+    const headMaterials = [
+      bodyMat, bodyMat, bodyMat, bodyMat,
+      headFaceMat, // Index 4: Front Face (+Z)
+      bodyMat,     // Index 5: Back of Head (-Z)
+    ];
+    const headGeom = new THREE.BoxGeometry(0.28, 0.36, 0.28);
+    this.headMesh = new THREE.Mesh(headGeom, headMaterials);
+    this.headMesh.position.set(0, 0.72, 0.3);
+
+    // Beak
+    const beakGeom = new THREE.BoxGeometry(0.14, 0.1, 0.14);
+    const beakMat = new THREE.MeshLambertMaterial({ color: 0xffb300 });
+    const beakMesh = new THREE.Mesh(beakGeom, beakMat);
+    beakMesh.position.set(0, -0.04, 0.18);
+    this.headMesh.add(beakMesh);
+
+    // Red Wattle
+    const wattleGeom = new THREE.BoxGeometry(0.1, 0.14, 0.08);
+    const wattleMat = new THREE.MeshLambertMaterial({ color: 0xd32f2f });
+    const wattleMesh = new THREE.Mesh(wattleGeom, wattleMat);
+    wattleMesh.position.set(0, -0.14, 0.12);
+    this.headMesh.add(wattleMesh);
+
+    this.group.add(this.headMesh);
+    this.registerMesh(this.headMesh);
+
+    // Wings
+    const wingGeom = new THREE.BoxGeometry(0.06, 0.28, 0.38);
+    this.leftWingMesh = new THREE.Mesh(wingGeom, wingMat);
+    this.leftWingMesh.position.set(-0.24, 0.45, 0);
+    this.group.add(this.leftWingMesh);
+    this.registerMesh(this.leftWingMesh);
+
+    this.rightWingMesh = new THREE.Mesh(wingGeom, wingMat);
+    this.rightWingMesh.position.set(0.24, 0.45, 0);
+    this.group.add(this.rightWingMesh);
+    this.registerMesh(this.rightWingMesh);
+
+    // 2 Legs
+    const legGeom = new THREE.BoxGeometry(0.08, 0.26, 0.08);
+    const legPositions = [
+      [-0.1, 0.13, 0],
+      [0.1, 0.13, 0],
+    ];
+    for (const [lx, ly, lz] of legPositions) {
+      const legMesh = new THREE.Mesh(legGeom, legMat);
+      legMesh.position.set(lx, ly, lz);
+      this.group.add(legMesh);
+      this.legMeshes.push(legMesh);
+      this.registerMesh(legMesh);
+    }
+  }
+
+  takeDamage(amount: number, knockbackDir: THREE.Vector3) {
+    super.takeDamage(amount, knockbackDir);
+    sounds.playChickenCluck();
+    sounds.playMobHit();
+    this.fleeTimer = 3.5;
+  }
+
+  updateAI(
+    dt: number,
+    world: VoxelWorld,
+    playerPos: THREE.Vector3,
+    _isDay: boolean,
+    _difficulty: GameDifficulty,
+    _onPlayerDamage: (damage: number) => void
+  ) {
+    if (this.isDead) return;
+
+    // Slow-falling chicken glide
+    if (this.velocity.y < -1.8) {
+      this.velocity.y = -1.8;
+      this.flapCycle += dt * 18;
+      const flap = Math.sin(this.flapCycle) * 0.8;
+      this.leftWingMesh.rotation.z = flap;
+      this.rightWingMesh.rotation.z = -flap;
+    }
+
+    // Ambient cluck
+    this.ambientSoundTimer -= dt;
+    if (this.ambientSoundTimer <= 0) {
+      const distToPlayer = this.position.distanceTo(playerPos);
+      if (distToPlayer < 24) {
+        sounds.playChickenCluck();
+      }
+      this.ambientSoundTimer = 8 + Math.random() * 15;
+    }
+
+    if (this.fleeTimer > 0) {
+      this.fleeTimer -= dt;
+      const away = new THREE.Vector3().subVectors(this.position, playerPos).normalize();
+      this.rotationY = Math.atan2(away.x, away.z);
+      const speed = 4.2;
+      this.velocity.x = away.x * speed;
+      this.velocity.z = away.z * speed;
+      this.isMoving = true;
+    } else {
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        this.wanderTimer = 2.5 + Math.random() * 4;
+        if (Math.random() < 0.6) {
+          this.rotationY += (Math.random() - 0.5) * 2.5;
+          this.isMoving = true;
+        } else {
+          this.isMoving = false;
+        }
+      }
+
+      if (this.isMoving) {
+        const speed = 1.6;
+        this.velocity.x = -Math.sin(this.rotationY) * speed;
+        this.velocity.z = Math.cos(this.rotationY) * speed;
+      }
+    }
+
+    if (this.isMoving) {
+      this.walkCycle += dt * 8.0;
+      const swing = Math.sin(this.walkCycle) * 0.5;
+      this.legMeshes[0].rotation.x = swing;
+      this.legMeshes[1].rotation.x = -swing;
+      const flap = Math.sin(this.walkCycle * 2) * 0.25;
+      this.leftWingMesh.rotation.z = flap;
+      this.rightWingMesh.rotation.z = -flap;
+    } else {
+      this.legMeshes.forEach((l) => (l.rotation.x = 0));
+      this.leftWingMesh.rotation.z = 0;
+      this.rightWingMesh.rotation.z = 0;
+    }
+
+    this.updatePhysics(dt, world);
+  }
+}
+
+// -------------------------------------------------------------
+// 6. POLAR BEAR MOB (Snow Biome animal)
+// -------------------------------------------------------------
+export class PolarBearMob extends BaseMob {
+  private bodyMesh!: THREE.Mesh;
+  private headMesh!: THREE.Mesh;
+  private legMeshes: THREE.Mesh[] = [];
+
+  private wanderTimer: number = 0;
+  private fleeTimer: number = 0;
+
+  constructor(id: string, pos: THREE.Vector3) {
+    super(id, 'polar_bear', pos, 30);
+    this.width = 1.1;
+    this.height = 1.45;
+    this.buildMesh();
+  }
+
+  private buildMesh() {
+    const { head, body, leg } = getPolarBearTextures();
+    const bodyMat = new THREE.MeshLambertMaterial({ map: body });
+    const headFaceMat = new THREE.MeshLambertMaterial({ map: head });
+    const legMat = new THREE.MeshLambertMaterial({ map: leg });
+
+    // Torso
+    const bodyGeom = new THREE.BoxGeometry(0.95, 0.85, 1.4);
+    this.bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+    this.bodyMesh.position.set(0, 0.85, 0);
+    this.group.add(this.bodyMesh);
+    this.registerMesh(this.bodyMesh);
+
+    // Head (+Z front face at index 4, -Z back of head at index 5)
+    const headMaterials = [
+      bodyMat, bodyMat, bodyMat, bodyMat,
+      headFaceMat, // Index 4: Front Face (+Z)
+      bodyMat,     // Index 5: Back of Head (-Z)
+    ];
+    const headGeom = new THREE.BoxGeometry(0.58, 0.58, 0.65);
+    this.headMesh = new THREE.Mesh(headGeom, headMaterials);
+    this.headMesh.position.set(0, 1.15, 0.82);
+    this.group.add(this.headMesh);
+    this.registerMesh(this.headMesh);
+
+    // 4 Strong Legs
+    const legPositions = [
+      [-0.32, 0.35, 0.48],
+      [0.32, 0.35, 0.48],
+      [-0.32, 0.35, -0.48],
+      [0.32, 0.35, -0.48],
+    ];
+    const legGeom = new THREE.BoxGeometry(0.28, 0.7, 0.28);
+    for (const [lx, ly, lz] of legPositions) {
+      const legMesh = new THREE.Mesh(legGeom, legMat);
+      legMesh.position.set(lx, ly, lz);
+      this.group.add(legMesh);
+      this.legMeshes.push(legMesh);
+      this.registerMesh(legMesh);
+    }
+  }
+
+  takeDamage(amount: number, knockbackDir: THREE.Vector3) {
+    super.takeDamage(amount, knockbackDir);
+    sounds.playMobHit();
+    this.fleeTimer = 2.5;
+  }
+
+  updateAI(
+    dt: number,
+    world: VoxelWorld,
+    playerPos: THREE.Vector3,
+    _isDay: boolean,
+    _difficulty: GameDifficulty,
+    _onPlayerDamage: (damage: number) => void
+  ) {
+    if (this.isDead) return;
+
+    if (this.fleeTimer > 0) {
+      this.fleeTimer -= dt;
+      const away = new THREE.Vector3().subVectors(this.position, playerPos).normalize();
+      this.rotationY = Math.atan2(away.x, away.z);
+      const speed = 3.6;
+      this.velocity.x = away.x * speed;
+      this.velocity.z = away.z * speed;
+      this.isMoving = true;
+    } else {
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        this.wanderTimer = 3.5 + Math.random() * 5.0;
+        if (Math.random() < 0.6) {
+          this.rotationY += (Math.random() - 0.5) * 1.8;
+          this.isMoving = true;
+        } else {
+          this.isMoving = false;
+        }
+      }
+
+      if (this.isMoving) {
+        const speed = 1.2;
+        this.velocity.x = -Math.sin(this.rotationY) * speed;
+        this.velocity.z = Math.cos(this.rotationY) * speed;
+      }
+    }
+
+    if (this.isMoving) {
+      this.walkCycle += dt * 4.5;
+      const swing = Math.sin(this.walkCycle) * 0.4;
+      this.legMeshes[0].rotation.x = swing;
+      this.legMeshes[1].rotation.x = -swing;
+      this.legMeshes[2].rotation.x = -swing;
+      this.legMeshes[3].rotation.x = swing;
+    } else {
+      this.legMeshes.forEach((l) => (l.rotation.x = 0));
+    }
+
+    this.updatePhysics(dt, world);
+  }
+}
+
+// -------------------------------------------------------------
+// 7. CREEPER (Iconic green hissing explosive mob)
+// -------------------------------------------------------------
+export class CreeperMob extends BaseMob {
+  private headMesh!: THREE.Mesh;
+  private bodyMesh!: THREE.Mesh;
+  private legMeshes: THREE.Mesh[] = [];
+
+  private fuseTimer: number = 0;
+  private isHissing: boolean = false;
+  public hasExploded: boolean = false;
+  private whiteMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+  constructor(id: string, pos: THREE.Vector3) {
+    super(id, 'creeper', pos, 20);
+    this.width = 0.6;
+    this.height = 1.7;
+    this.buildMesh();
+  }
+
+  private buildMesh() {
+    const { head, headSide, body, leg } = getCreeperTextures();
+    const headFaceMat = new THREE.MeshLambertMaterial({ map: head });
+    const headSideMat = new THREE.MeshLambertMaterial({ map: headSide });
+    const bodyMat = new THREE.MeshLambertMaterial({ map: body });
+    const legMat = new THREE.MeshLambertMaterial({ map: leg });
+
+    // 1. Head (+Z index 4 is Front Face; -Z index 5 is Back)
+    const headMaterials = [
+      headSideMat, headSideMat, headSideMat, headSideMat,
+      headFaceMat, // Index 4: Front Face (+Z)
+      headSideMat, // Index 5: Back of Head (-Z)
+    ];
+    const headGeom = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    this.headMesh = new THREE.Mesh(headGeom, headMaterials);
+    this.headMesh.position.set(0, 1.45, 0);
+    this.group.add(this.headMesh);
+    this.registerMesh(this.headMesh);
+
+    // 2. Torso
+    const bodyGeom = new THREE.BoxGeometry(0.48, 0.68, 0.28);
+    this.bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+    this.bodyMesh.position.set(0, 0.86, 0);
+    this.group.add(this.bodyMesh);
+    this.registerMesh(this.bodyMesh);
+
+    // 3. 4 Stubby Legs
+    const legPositions = [
+      [-0.14, 0.26, 0.16],
+      [0.14, 0.26, 0.16],
+      [-0.14, 0.26, -0.16],
+      [0.14, 0.26, -0.16],
+    ];
+    const legGeom = new THREE.BoxGeometry(0.2, 0.52, 0.2);
+    for (const [lx, ly, lz] of legPositions) {
+      const legMesh = new THREE.Mesh(legGeom, legMat);
+      legMesh.position.set(lx, ly, lz);
+      this.group.add(legMesh);
+      this.legMeshes.push(legMesh);
+      this.registerMesh(legMesh);
+    }
+  }
+
+  takeDamage(amount: number, knockbackDir: THREE.Vector3) {
+    super.takeDamage(amount, knockbackDir);
+    sounds.playMobHit();
+  }
+
+  updateAI(
+    dt: number,
+    world: VoxelWorld,
+    playerPos: THREE.Vector3,
+    _isDay: boolean,
+    difficulty: GameDifficulty,
+    onPlayerDamage: (damage: number) => void
+  ) {
+    if (this.isDead) return;
+
+    if (difficulty === 'peaceful') {
+      this.isDead = true;
+      return;
+    }
+
+    const distToPlayer = this.position.distanceTo(playerPos);
+    const aggroRadius = difficulty === 'hard' ? 24 : 16;
+
+    // A. Player within explosion prime radius (3.2 blocks)
+    if (distToPlayer <= 3.2) {
+      if (!this.isHissing) {
+        this.isHissing = true;
+        sounds.playCreeperHiss();
+      }
+
+      this.fuseTimer += dt;
+      // White flashing and swelling effect
+      const swell = 1.0 + (this.fuseTimer / 1.4) * 0.28;
+      this.group.scale.set(swell, swell, swell);
+
+      const isWhiteFlash = Math.floor(this.fuseTimer * 9) % 2 === 1;
+      if (isWhiteFlash) {
+        this.headMesh.material = this.whiteMaterial;
+        this.bodyMesh.material = this.whiteMaterial;
+      } else {
+        this.headMesh.material = this.meshMaterials.get(this.headMesh)!;
+        this.bodyMesh.material = this.meshMaterials.get(this.bodyMesh)!;
+      }
+
+      // Stand still while hissing
+      this.velocity.x *= 0.5;
+      this.velocity.z *= 0.5;
+      this.isMoving = false;
+
+      // DETONATION!
+      if (this.fuseTimer >= 1.4) {
+        this.hasExploded = true;
+        this.isDead = true;
+        this.group.scale.set(1, 1, 1);
+        sounds.playExplosion();
+        const dmg = difficulty === 'hard' ? 55 : difficulty === 'normal' ? 36 : 22;
+        onPlayerDamage(dmg);
+        return;
+      }
+    } else if (distToPlayer > 5.5 && this.isHissing) {
+      // Player fled in time -> abort fuse
+      this.isHissing = false;
+      this.fuseTimer = Math.max(0, this.fuseTimer - dt * 2.0);
+      this.group.scale.set(1, 1, 1);
+      this.headMesh.material = this.meshMaterials.get(this.headMesh)!;
+      this.bodyMesh.material = this.meshMaterials.get(this.bodyMesh)!;
+    }
+
+    // B. Approach player if aggroed and not primed
+    if (distToPlayer <= aggroRadius && !this.isHissing) {
+      const dirX = playerPos.x - this.position.x;
+      const dirZ = playerPos.z - this.position.z;
+      this.rotationY = Math.atan2(dirX, dirZ);
+
+      const speed = difficulty === 'hard' ? 2.8 : 2.2;
+      const norm = Math.sqrt(dirX * dirX + dirZ * dirZ) || 1;
+      this.velocity.x = (dirX / norm) * speed;
+      this.velocity.z = (dirZ / norm) * speed;
+      this.isMoving = true;
+    } else if (!this.isHissing) {
+      this.velocity.x *= 0.8;
+      this.velocity.z *= 0.8;
+      this.isMoving = false;
+    }
+
+    // Limbs animation
+    if (this.isMoving) {
+      this.walkCycle += dt * 6.5;
+      const legSwing = Math.sin(this.walkCycle) * 0.45;
+      this.legMeshes[0].rotation.x = legSwing;
+      this.legMeshes[1].rotation.x = -legSwing;
+      this.legMeshes[2].rotation.x = -legSwing;
+      this.legMeshes[3].rotation.x = legSwing;
+    } else {
+      this.legMeshes.forEach((l) => (l.rotation.x = 0));
+    }
+
+    this.updatePhysics(dt, world);
+  }
+
+  destroy() {
+    this.whiteMaterial.dispose();
+    super.destroy();
+  }
+}
+
+// -------------------------------------------------------------
 // MOB MANAGER: Spawning, Despawning, Targeting, Drops
 // -------------------------------------------------------------
 export class MobManager {
@@ -815,6 +1840,16 @@ export class MobManager {
     const id = `mob_${type}_${this.nextMobId++}`;
     if (type === 'sheep') {
       mob = new SheepMob(id, pos);
+    } else if (type === 'cow') {
+      mob = new CowMob(id, pos);
+    } else if (type === 'pig') {
+      mob = new PigMob(id, pos);
+    } else if (type === 'chicken') {
+      mob = new ChickenMob(id, pos);
+    } else if (type === 'polar_bear') {
+      mob = new PolarBearMob(id, pos);
+    } else if (type === 'creeper') {
+      mob = new CreeperMob(id, pos);
     } else {
       mob = new ZombieMob(id, pos);
     }
@@ -838,7 +1873,7 @@ export class MobManager {
     // 1. Spawning cycle (every ~4 seconds)
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
-      this.spawnTimer = 3.8 + Math.random() * 2.0;
+      this.spawnTimer = 3.6 + Math.random() * 1.8;
       this.trySpawnMobs(playerPos, isDay, difficulty);
     }
 
@@ -873,17 +1908,37 @@ export class MobManager {
 
       // Handle Death
       if (mob.isDead) {
-        this.particles.spawnDeathPuff(mob.position);
+        if (mob instanceof CreeperMob && mob.hasExploded) {
+          this.particles.spawnExplosionEffect(mob.position);
+        } else {
+          this.particles.spawnDeathPuff(mob.position);
+        }
 
         // Grant item drops
         if (mob.type === 'sheep') {
-          inventory.addItem(BLOCK_TYPES.CORAL_PINK, 1); // Wool block proxy / starter supply
+          inventory.addItem(ITEM_TYPES.RAW_MUTTON, 1 + Math.floor(Math.random() * 2));
+          inventory.addItem(BLOCK_TYPES.WHITE_TERRACOTTA, 1); // Wool
+        } else if (mob.type === 'cow') {
+          inventory.addItem(ITEM_TYPES.RAW_BEEF, 1 + Math.floor(Math.random() * 3));
+          if (Math.random() < 0.65) inventory.addItem(ITEM_TYPES.LEATHER, 1);
+        } else if (mob.type === 'pig') {
+          inventory.addItem(ITEM_TYPES.RAW_PORKCHOP, 1 + Math.floor(Math.random() * 3));
+        } else if (mob.type === 'chicken') {
+          inventory.addItem(ITEM_TYPES.RAW_CHICKEN, 1);
+          inventory.addItem(ITEM_TYPES.FEATHER, 1 + Math.floor(Math.random() * 2));
+        } else if (mob.type === 'polar_bear') {
+          inventory.addItem(ITEM_TYPES.RAW_BEEF, 2 + Math.floor(Math.random() * 2));
         } else if (mob.type === 'zombie') {
-          // Drop rotten flesh or rare iron ingot!
+          // Drop coal or rare iron ingot!
           if (Math.random() < 0.35) {
             inventory.addItem(ITEM_TYPES.IRON_INGOT, 1);
           } else {
             inventory.addItem(ITEM_TYPES.COAL, 2);
+          }
+        } else if (mob.type === 'creeper') {
+          // Drop gunpowder (coal fuel) if defeated before detonating
+          if (!((mob as CreeperMob).hasExploded)) {
+            inventory.addItem(ITEM_TYPES.COAL, 2 + Math.floor(Math.random() * 3));
           }
         }
 
@@ -893,28 +1948,37 @@ export class MobManager {
   }
 
   private trySpawnMobs(playerPos: THREE.Vector3, isDay: boolean, difficulty: GameDifficulty) {
-    const sheepCount = this.mobs.filter((m) => m.type === 'sheep').length;
-    const zombieCount = this.mobs.filter((m) => m.type === 'zombie').length;
+    const passiveCount = this.mobs.filter((m) => m.type !== 'zombie' && m.type !== 'creeper').length;
+    const hostileCount = this.mobs.filter((m) => m.type === 'zombie' || m.type === 'creeper').length;
 
-    const maxSheep = 5;
-    const maxZombies = difficulty === 'peaceful' ? 0 : difficulty === 'hard' ? 7 : difficulty === 'normal' ? 5 : 3;
+    const maxPassive = 10;
+    const maxHostiles = difficulty === 'peaceful' ? 0 : difficulty === 'hard' ? 8 : difficulty === 'normal' ? 6 : 4;
 
-    // Spawn Sheep on sunny grassland
-    if (sheepCount < maxSheep && Math.random() < 0.7) {
-      const pos = this.findValidSpawnPos(playerPos, 16, 40);
+    // Spawn Passive Animals
+    if (passiveCount < maxPassive && Math.random() < 0.75) {
+      const pos = this.findValidSpawnPos(playerPos, 14, 38);
       if (pos) {
-        this.spawnMob('sheep', pos);
+        const surfBlock = this.world.getBlock(Math.floor(pos.x), Math.floor(pos.y - 1), Math.floor(pos.z));
+        if (surfBlock === BLOCK_TYPES.SNOW || surfBlock === BLOCK_TYPES.ICE) {
+          const snowTypes: MobType[] = ['polar_bear', 'sheep', 'chicken'];
+          const chosen = snowTypes[Math.floor(Math.random() * snowTypes.length)];
+          this.spawnMob(chosen, pos);
+        } else {
+          const farmTypes: MobType[] = ['cow', 'pig', 'sheep', 'chicken'];
+          const chosen = farmTypes[Math.floor(Math.random() * farmTypes.length)];
+          this.spawnMob(chosen, pos);
+        }
       }
     }
 
-    // Spawn Zombies (at night or in caves/shade, none in peaceful)
-    if (difficulty !== 'peaceful' && zombieCount < maxZombies) {
-      // Higher spawn rate at night
+    // Spawn Hostile Mobs (Zombies and Creepers at night or in darkness)
+    if (difficulty !== 'peaceful' && hostileCount < maxHostiles) {
       const chance = !isDay ? 0.85 : 0.25;
       if (Math.random() < chance) {
         const pos = this.findValidSpawnPos(playerPos, 18, 42);
         if (pos) {
-          this.spawnMob('zombie', pos);
+          const hostileType: MobType = Math.random() < 0.4 ? 'creeper' : 'zombie';
+          this.spawnMob(hostileType, pos);
         }
       }
     }

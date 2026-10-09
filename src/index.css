@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+@layer utilities {
+  .font-minecraft {
+    font-family: 'Press Start 2P', 'Silkscreen', 'VT323', monospace;
+  }
+  .font-pixel {
+    font-family: 'Silkscreen', 'VT323', monospace;
+  }
+  .image-pixelated {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Custom scrollbars & smooth rendering */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.4);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}

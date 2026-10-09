@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { generateProceduralBlockTextures, BlockTextureAtlas } from './textures';
 import { VoxelWorld, BLOCK_TYPES, WORLD_HEIGHT, SEA_LEVEL } from './world';
 import { PlayerPhysics } from './physics';
-import { InventorySystem, ITEM_TYPES, ARMOR_DATA } from './inventory';
+import { InventorySystem, ITEM_TYPES, ARMOR_DATA, ITEM_DEFINITIONS, FOOD_NUTRITION } from './inventory';
 import { SteveCharacter, FirstPersonViewModel, createHeldItemMesh } from './playerModel';
 import { BlockBreakOverlay } from './breakOverlay';
 import { sounds } from './audio';
@@ -20,6 +20,8 @@ export interface EngineStats {
   isLocked: boolean;
   health: number;
   oxygen: number;
+  hunger: number;
+  maxHunger: number;
   isSubmerged: boolean;
   inWater: boolean;
   perspectiveMode: number;
@@ -29,6 +31,7 @@ export interface EngineStats {
   gameMode: GameMode;
   difficulty: GameDifficulty;
   isFlying: boolean;
+  biomeName: string;
 }
 
 interface Particle {
@@ -36,6 +39,14 @@ interface Particle {
   velocity: THREE.Vector3;
   life: number;
   maxLife: number;
+}
+
+interface ItemDropEntity {
+  mesh: THREE.Mesh;
+  itemId: number;
+  velocity: THREE.Vector3;
+  bobTimer: number;
+  life: number;
 }
 
 export class VoxelGameEngine {
@@ -60,6 +71,9 @@ export class VoxelGameEngine {
   ambientLight: THREE.AmbientLight;
   hemiLight: THREE.HemisphereLight;
   sunLight: THREE.DirectionalLight;
+  heldTorchLight!: THREE.PointLight;
+  torchLightPool: THREE.PointLight[] = [];
+  snowballs: { mesh: THREE.Mesh; vel: THREE.Vector3; life: number }[] = [];
   sunMesh: THREE.Mesh;
   moonMesh: THREE.Mesh;
 
@@ -75,6 +89,8 @@ export class VoxelGameEngine {
   miningSwingTimer: number = 0;
 
   particles: Particle[] = [];
+  itemDrops: ItemDropEntity[] = [];
+  bubbleTimer: number = 0;
   keys: Record<string, boolean> = {};
 
   timeOfDay: number = 0.25; // 0 to 1
@@ -101,6 +117,7 @@ export class VoxelGameEngine {
   }
 
   onStatsUpdate?: (stats: EngineStats) => void;
+  onOpenFurnace?: () => void;
   isRunning: boolean = true;
   lastTime: number = 0;
   frameCount: number = 0;
@@ -148,19 +165,16 @@ export class VoxelGameEngine {
     this.weather = new WeatherSystem(this.scene);
 
     // 4. Initial Player spawn on terrain & Character Models
+    const spawnX = 0.5;
+    const spawnZ = 0.5;
     const spawnY = this.world.getHighestSolidBlock(0, 0) + 1.2;
-    this.physics = new PlayerPhysics(this.world, new THREE.Vector3(0.5, spawnY, 0.5));
+    this.physics = new PlayerPhysics(this.world, new THREE.Vector3(spawnX, spawnY, spawnZ));
 
-    // Steve 3D Character Model (for 3rd person)
-    this.steve = new SteveCharacter();
-    this.steve.group.visible = false;
-    this.scene.add(this.steve.group);
+    this.steve = new SteveCharacter(this.scene);
+    this.viewModel = new FirstPersonViewModel(this.camera);
+    this.mobs = new MobManager(this.scene, this.world);
 
-    // First-Person View Model (Arm + Held Tools/Blocks on bottom right)
-    this.viewModel = new FirstPersonViewModel();
-    this.camera.add(this.viewModel.root);
-
-    // 5. Lighting & Celestial Orbs
+    // 5. Environmental Lighting
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
     this.scene.add(this.ambientLight);
 
@@ -172,30 +186,55 @@ export class VoxelGameEngine {
     this.scene.add(this.sunLight);
     this.scene.add(this.sunLight.target);
 
-    const sunGeo = new THREE.PlaneGeometry(24, 24);
-    const sunMat = new THREE.MeshBasicMaterial({ color: 0xfff3a8, side: THREE.DoubleSide });
-    this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
+    // 5b. Dynamic Handheld Torch Light (OptiFine-style real-time illumination)
+    this.heldTorchLight = new THREE.PointLight(0xffa53a, 0, 20, 1.25);
+    this.heldTorchLight.visible = false;
+    this.scene.add(this.heldTorchLight);
+
+    // 5c. Placed Torch Dynamic Point Light Pool
+    this.torchLightPool = [];
+    for (let i = 0; i < 8; i++) {
+      const pl = new THREE.PointLight(0xff962e, 0, 16, 1.35);
+      pl.visible = false;
+      this.scene.add(pl);
+      this.torchLightPool.push(pl);
+    }
+
+    // 6. Minecraft Celestial Bodies (Square Sun & Moon)
+    const sunGeom = new THREE.PlaneGeometry(16, 16);
+    const sunMat = new THREE.MeshBasicMaterial({
+      color: 0xfff3a8,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+    this.sunMesh = new THREE.Mesh(sunGeom, sunMat);
     this.scene.add(this.sunMesh);
 
-    const moonGeo = new THREE.PlaneGeometry(20, 20);
-    const moonMat = new THREE.MeshBasicMaterial({ color: 0xe6edf8, side: THREE.DoubleSide });
-    this.moonMesh = new THREE.Mesh(moonGeo, moonMat);
+    const moonGeom = new THREE.PlaneGeometry(14, 14);
+    const moonMat = new THREE.MeshBasicMaterial({
+      color: 0xe6edf8,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+    this.moonMesh = new THREE.Mesh(moonGeom, moonMat);
     this.scene.add(this.moonMesh);
 
-    // 6. Targeting Raycaster & Wireframe highlight
+    // 7. Raycaster & Block Outlines
     this.raycaster = new THREE.Raycaster();
     this.raycaster.far = 5.5;
 
-    const boxGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.004, 1.004, 1.004));
-    const boxMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
-    this.wireframeBox = new THREE.LineSegments(boxGeo, boxMat);
+    const boxGeom = new THREE.BoxGeometry(1.004, 1.004, 1.004);
+    const edges = new THREE.EdgesGeometry(boxGeom);
+    this.wireframeBox = new THREE.LineSegments(
+      edges,
+      new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 })
+    );
     this.wireframeBox.visible = false;
     this.scene.add(this.wireframeBox);
 
     this.breakOverlay = new BlockBreakOverlay(this.scene);
-    this.mobs = new MobManager(this.scene, this.world);
 
-    // 7. Event listeners
+    // 8. Event Listeners
     this.boundOnMouseMove = this.onMouseMove.bind(this);
     this.boundOnMouseDown = this.onMouseDown.bind(this);
     this.boundOnMouseUp = this.onMouseUp.bind(this);
@@ -206,8 +245,6 @@ export class VoxelGameEngine {
     this.boundOnPointerLockChange = this.onPointerLockChange.bind(this);
 
     this.attachEvents();
-
-    // 8. Start Loop immediately
     this.lastTime = performance.now();
     this.animate();
   }
@@ -233,11 +270,11 @@ export class VoxelGameEngine {
     window.addEventListener('mousemove', this.boundOnMouseMove);
     this.renderer.domElement.addEventListener('mousedown', this.boundOnMouseDown);
     window.addEventListener('mouseup', this.boundOnMouseUp);
-    this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('keydown', this.boundOnKeyDown);
     window.addEventListener('keyup', this.boundOnKeyUp);
-    window.addEventListener('wheel', this.boundOnWheel, { passive: false });
+    window.addEventListener('wheel', this.boundOnWheel, { passive: true });
     window.addEventListener('resize', this.boundOnResize);
+    this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
   private onPointerLockChange() {
@@ -268,14 +305,15 @@ export class VoxelGameEngine {
     this.lastMouseX = e.clientX;
     this.lastMouseY = e.clientY;
 
+    const activeSlot = this.inventory.slots[this.inventory.selectedHotbarIndex];
+    const activeId = activeSlot ? activeSlot.id : 0;
+
     if (e.button === 0) {
       // 1. Raycast combat attack against Mobs
       const rayOrigin = this.camera.position.clone();
       const rayDir = new THREE.Vector3();
       this.camera.getWorldDirection(rayDir);
 
-      const activeSlot = this.inventory.slots[this.inventory.selectedHotbarIndex];
-      const activeId = activeSlot ? activeSlot.id : 0;
       let damage = 6;
       if (this.physics.gameMode === 'creative') {
         damage = 999; // 1-hit kill in Creative
@@ -309,6 +347,7 @@ export class VoxelGameEngine {
           this.steve.triggerSwing();
           this.world.setBlock(x, y, z, BLOCK_TYPES.AIR);
           this.spawnDebris(x, y, z, blockType);
+          this.spawnItemDrop(x, y, z, blockType);
           sounds.playBlockBreak(blockType);
           this.updateTargeting();
           return;
@@ -323,10 +362,91 @@ export class VoxelGameEngine {
         sounds.playHit();
       }
     } else if (e.button === 2) {
-      // Right Click: Place block from inventory
+      // Right Click
       e.preventDefault();
       this.viewModel.triggerSwing();
       this.steve.triggerSwing();
+
+      // 0. Furnace Interaction (Right clicking on placed furnace opens the cooking UI)
+      if (this.targetBlock) {
+        const { x, y, z } = this.targetBlock;
+        const targetType = this.world.getBlock(x, y, z);
+        if (targetType === BLOCK_TYPES.FURNACE || targetType === BLOCK_TYPES.FURNACE_LIT) {
+          if (this.onOpenFurnace) {
+            this.onOpenFurnace();
+            return;
+          }
+        }
+      }
+
+      // A. Food Consumption (Restores hunger & health)
+      if (activeId && FOOD_NUTRITION[activeId]) {
+        const nut = FOOD_NUTRITION[activeId];
+        const canEat =
+          this.physics.hunger < this.physics.maxHunger ||
+          this.physics.health < this.physics.maxHealth ||
+          activeId === ITEM_TYPES.GOLDEN_APPLE;
+
+        if (canEat) {
+          this.physics.feed(nut.hunger, nut.saturation);
+          if (activeId === ITEM_TYPES.GOLDEN_APPLE) {
+            this.physics.health = Math.min(this.physics.maxHealth, this.physics.health + 80);
+          }
+          this.inventory.consumeSelected();
+          sounds.playEat();
+          if (this.physics.hunger >= 20) {
+            sounds.playBurp();
+          }
+          this.updateHeldItem();
+          return;
+        }
+      }
+
+      // B. Throwable Snowballs (Authentic projectile flight, mob knockback & crisp snow crunch)
+      if (activeId === ITEM_TYPES.SNOWBALL) {
+        this.throwSnowball();
+        if (this.physics.gameMode !== 'creative') {
+          this.inventory.consumeSelected();
+        }
+        sounds.playSnowballThrow();
+        this.viewModel.triggerSwing();
+        this.steve.triggerSwing();
+        this.updateHeldItem();
+        return;
+      }
+
+      // C. Water Bucket Mechanics
+      if (activeId === ITEM_TYPES.WATER_BUCKET && this.targetBlock) {
+        const px = this.targetBlock.x + Math.round(this.targetBlock.norm.x);
+        const py = this.targetBlock.y + Math.round(this.targetBlock.norm.y);
+        const pz = this.targetBlock.z + Math.round(this.targetBlock.norm.z);
+        if (py >= 0 && py < WORLD_HEIGHT) {
+          this.world.setBlock(px, py, pz, BLOCK_TYPES.WATER);
+          sounds.playBucketUse();
+          sounds.playWaterSplash();
+          if (this.physics.gameMode !== 'creative') {
+            this.inventory.slots[this.inventory.selectedHotbarIndex] = { id: ITEM_TYPES.BUCKET, count: 1 };
+          }
+          this.updateTargeting();
+        }
+        return;
+      }
+
+      // C. Empty Bucket Scoop Mechanics
+      if (activeId === ITEM_TYPES.BUCKET && this.targetBlock) {
+        const { x, y, z } = this.targetBlock;
+        if (this.world.getBlock(x, y, z) === BLOCK_TYPES.WATER) {
+          this.world.setBlock(x, y, z, BLOCK_TYPES.AIR);
+          sounds.playBucketUse();
+          if (this.physics.gameMode !== 'creative') {
+            this.inventory.slots[this.inventory.selectedHotbarIndex] = { id: ITEM_TYPES.WATER_BUCKET, count: 1 };
+          }
+          this.updateTargeting();
+          return;
+        }
+      }
+
+      // D. Block Placement from Inventory
       if (this.targetBlock) {
         const selectedBlock = this.inventory.getSelectedBlockId();
         if (selectedBlock) {
@@ -348,7 +468,7 @@ export class VoxelGameEngine {
           if (!collidesWithPlayer && placeY >= 0 && placeY < WORLD_HEIGHT) {
             this.world.setBlock(placeX, placeY, placeZ, selectedBlock);
             if (this.physics.gameMode !== 'creative') {
-              this.inventory.consumeActiveBlock();
+              this.inventory.consumeSelected();
             }
             sounds.playBlockPlace(selectedBlock);
             this.updateTargeting();
@@ -371,7 +491,6 @@ export class VoxelGameEngine {
   private onKeyDown(e: KeyboardEvent) {
     if (this.isPaused || this.inPanoramaMode) return;
     this.keys[e.code] = true;
-    // 1-6 Hotbar selection
     if (e.code >= 'Digit1' && e.code <= 'Digit6') {
       const slotIndex = parseInt(e.code.replace('Digit', '')) - 1;
       if (this.inventory.selectedHotbarIndex !== slotIndex) {
@@ -410,7 +529,6 @@ export class VoxelGameEngine {
 
   private updateTargeting() {
     this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
-    // Only intersect valid, attached chunk meshes with active geometries
     const validMeshes = this.world.chunkMeshes.filter(
       (m) => m && m.parent && m.geometry && m.geometry.attributes && m.geometry.attributes.position
     );
@@ -420,13 +538,12 @@ export class VoxelGameEngine {
       const hit = intersects[0];
       const norm = hit.face ? hit.face.normal : new THREE.Vector3(0, 1, 0);
 
-      // Probe slightly inward to get target block
       const probePoint = hit.point.clone().sub(norm.clone().multiplyScalar(0.01));
       const bx = Math.floor(probePoint.x);
       const by = Math.floor(probePoint.y);
       const bz = Math.floor(probePoint.z);
 
-      if (this.world.isSolid(bx, by, bz)) {
+      if (this.world.isSolid(bx, by, bz) || this.world.getBlock(bx, by, bz) === BLOCK_TYPES.WATER) {
         this.targetBlock = { x: bx, y: by, z: bz, norm: norm.clone() };
         this.wireframeBox.position.set(bx + 0.5, by + 0.5, bz + 0.5);
         this.wireframeBox.visible = true;
@@ -441,30 +558,20 @@ export class VoxelGameEngine {
   private spawnDebris(bx: number, by: number, bz: number, blockType: number) {
     let color = 0x866043;
     if (blockType === BLOCK_TYPES.GRASS) color = 0x5c8e32;
-    else if (blockType === BLOCK_TYPES.STONE) color = 0x777777;
-    else if (blockType === BLOCK_TYPES.WOOD) color = 0x6b5030;
-    else if (blockType === BLOCK_TYPES.LEAVES) color = 0x3a7a28;
+    else if (blockType === BLOCK_TYPES.STONE || blockType === BLOCK_TYPES.DEEPSLATE) color = 0x777777;
+    else if (blockType === BLOCK_TYPES.WOOD || blockType === BLOCK_TYPES.DARK_OAK_WOOD || blockType === BLOCK_TYPES.JUNGLE_WOOD) color = 0x6b5030;
+    else if (blockType === BLOCK_TYPES.LEAVES || blockType === BLOCK_TYPES.DARK_OAK_LEAVES || blockType === BLOCK_TYPES.JUNGLE_LEAVES) color = 0x3a7a28;
     else if (blockType === BLOCK_TYPES.BRICK) color = 0xa04030;
     else if (blockType === BLOCK_TYPES.SAND) color = 0xd8c287;
-    else if (blockType === BLOCK_TYPES.CORAL_PINK) color = 0xe05688;
-    else if (blockType === BLOCK_TYPES.CORAL_CYAN) color = 0x17c0eb;
-    else if (blockType === BLOCK_TYPES.CORAL_YELLOW) color = 0xf5cd79;
-    else if (blockType === BLOCK_TYPES.WOOD_PLANKS) color = 0xb8860b;
-    else if (blockType === BLOCK_TYPES.GLASS) color = 0xd7ebfc;
-    else if (blockType === BLOCK_TYPES.COAL_ORE) color = 0x333333;
-    else if (blockType === BLOCK_TYPES.IRON_ORE) color = 0xd8af93;
-    else if (blockType === BLOCK_TYPES.GOLD_ORE) color = 0xfcee4b;
-    else if (blockType === BLOCK_TYPES.DIAMOND_ORE) color = 0x5df5e4;
-    else if (blockType === BLOCK_TYPES.BIRCH_WOOD) color = 0xd5d4cb;
-    else if (blockType === BLOCK_TYPES.RED_FLOWER) color = 0xdd2222;
-    else if (blockType === BLOCK_TYPES.YELLOW_FLOWER) color = 0xffe033;
-    else if (blockType === BLOCK_TYPES.SEAWEED) color = 0x228b22;
-    else if (blockType === BLOCK_TYPES.TORCH) color = 0xffa500;
-    else if (blockType === BLOCK_TYPES.SNOW) color = 0xf0f8ff;
-    else if (blockType === BLOCK_TYPES.ICE) color = 0x90caf9;
-    else if (blockType === BLOCK_TYPES.CACTUS) color = 0x2e7d32;
-    else if (blockType === BLOCK_TYPES.CHERRY_LEAVES) color = 0xf48fb1;
-    else if (blockType === BLOCK_TYPES.RED_SAND) color = 0xb7532a;
+    else if (blockType === BLOCK_TYPES.RED_SAND || blockType === BLOCK_TYPES.TERRACOTTA || blockType === BLOCK_TYPES.RED_TERRACOTTA) color = 0xb7532a;
+    else if (blockType === BLOCK_TYPES.AMETHYST) color = 0x9b59b6;
+    else if (blockType === BLOCK_TYPES.MAGMA) color = 0xd94b0d;
+    else if (blockType === BLOCK_TYPES.GLOWSTONE) color = 0xfbc531;
+    else if (blockType === BLOCK_TYPES.OBSIDIAN) color = 0x1f1933;
+    else if (blockType === BLOCK_TYPES.MELON) color = 0x44bd32;
+    else if (blockType === BLOCK_TYPES.PUMPKIN) color = 0xe67e22;
+    else if (blockType === BLOCK_TYPES.RED_MUSHROOM_BLOCK) color = 0xe74c3c;
+    else if (blockType === BLOCK_TYPES.BROWN_MUSHROOM_BLOCK) color = 0x8c6747;
 
     const geo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
     const mat = new THREE.MeshBasicMaterial({ color });
@@ -491,26 +598,142 @@ export class VoxelGameEngine {
     }
   }
 
+  // 3D Floating & Spinning Item Drops
+  private spawnItemDrop(bx: number, by: number, bz: number, itemId: number) {
+    const geo = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+    let color = 0x866043;
+    if (itemId === BLOCK_TYPES.GRASS) color = 0x5c8e32;
+    else if (itemId === BLOCK_TYPES.STONE) color = 0x777777;
+    else if (itemId === BLOCK_TYPES.AMETHYST || itemId === ITEM_TYPES.AMETHYST_SHARD) color = 0x9b59b6;
+    else if (itemId === BLOCK_TYPES.MELON || itemId === ITEM_TYPES.MELON_SLICE) color = 0x2ed573;
+    else if (itemId === BLOCK_TYPES.GOLD_ORE || itemId === ITEM_TYPES.GOLD_INGOT) color = 0xfdcb6e;
+    else if (itemId === BLOCK_TYPES.DIAMOND_ORE || itemId === ITEM_TYPES.DIAMOND) color = 0x00d2d3;
+    else if (itemId === BLOCK_TYPES.TORCH) color = 0xff9f43;
+
+    const mat = new THREE.MeshLambertMaterial({ color });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(bx + 0.5, by + 0.5, bz + 0.5);
+    this.scene.add(mesh);
+
+    this.itemDrops.push({
+      mesh,
+      itemId,
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 2, 2.5, (Math.random() - 0.5) * 2),
+      bobTimer: Math.random() * Math.PI,
+      life: 60.0,
+    });
+  }
+
+  private updateItemDrops(dt: number) {
+    const playerPos = this.physics.position;
+
+    for (let i = this.itemDrops.length - 1; i >= 0; i--) {
+      const drop = this.itemDrops[i];
+      drop.life -= dt;
+      drop.bobTimer += dt * 3.0;
+
+      // Gravity & float on ground / water
+      drop.velocity.y -= 14.0 * dt;
+      drop.mesh.position.addScaledVector(drop.velocity, dt);
+      drop.mesh.rotation.y += 2.0 * dt;
+
+      const curX = Math.floor(drop.mesh.position.x);
+      const curY = Math.floor(drop.mesh.position.y);
+      const curZ = Math.floor(drop.mesh.position.z);
+
+      const blockBelow = this.world.getBlock(curX, curY - 1, curZ);
+      if (this.world.isSolid(curX, curY - 1, curZ) || blockBelow === BLOCK_TYPES.WATER) {
+        drop.velocity.y = 0;
+        drop.mesh.position.y = Math.floor(drop.mesh.position.y) + 0.25 + Math.sin(drop.bobTimer) * 0.08;
+      }
+
+      // Magnetize towards player within 2.8m
+      const dist = drop.mesh.position.distanceTo(playerPos);
+      if (dist < 2.8) {
+        const pullDir = playerPos.clone().sub(drop.mesh.position).normalize();
+        drop.mesh.position.addScaledVector(pullDir, dt * 6.5);
+
+        // Pick up within 0.75m
+        if (dist < 0.75) {
+          this.inventory.addItem(drop.itemId, 1);
+          sounds.playItemPickup();
+          this.scene.remove(drop.mesh);
+          drop.mesh.geometry.dispose();
+          this.itemDrops.splice(i, 1);
+          continue;
+        }
+      }
+
+      if (drop.life <= 0) {
+        this.scene.remove(drop.mesh);
+        drop.mesh.geometry.dispose();
+        this.itemDrops.splice(i, 1);
+      }
+    }
+  }
+
+  private spawnWaterSplashParticles(px: number, py: number, pz: number) {
+    const geo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x81d4fa, transparent: true, opacity: 0.85 });
+
+    for (let i = 0; i < 16; i++) {
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(px + (Math.random() - 0.5) * 0.6, py + 0.1, pz + (Math.random() - 0.5) * 0.6);
+      this.scene.add(mesh);
+      this.particles.push({
+        mesh,
+        velocity: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 3 + 2, (Math.random() - 0.5) * 3),
+        life: 0.45,
+        maxLife: 0.45,
+      });
+    }
+  }
+
+  private spawnBubbleParticle(px: number, py: number, pz: number) {
+    const geo = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xb3e5fc, transparent: true, opacity: 0.75 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(px + (Math.random() - 0.5) * 0.4, py, pz + (Math.random() - 0.5) * 0.4);
+    this.scene.add(mesh);
+    this.particles.push({
+      mesh,
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 0.3, Math.random() * 1.5 + 1.0, (Math.random() - 0.5) * 0.3),
+      life: 0.8,
+      maxLife: 0.8,
+    });
+  }
+
   private getBlockHardnessTime(blockType: number): number {
     switch (blockType) {
       case BLOCK_TYPES.LEAVES:
+      case BLOCK_TYPES.DARK_OAK_LEAVES:
+      case BLOCK_TYPES.JUNGLE_LEAVES:
       case BLOCK_TYPES.CHERRY_LEAVES:
       case BLOCK_TYPES.RED_FLOWER:
       case BLOCK_TYPES.YELLOW_FLOWER:
       case BLOCK_TYPES.SEAWEED:
       case BLOCK_TYPES.TORCH:
-        return 0.2;
+      case BLOCK_TYPES.LILY_PAD:
+        return 0.18;
       case BLOCK_TYPES.SNOW:
         return 0.25;
       case BLOCK_TYPES.GLASS:
         return 0.35;
       case BLOCK_TYPES.CACTUS:
+      case BLOCK_TYPES.MUSHROOM_STEM:
+      case BLOCK_TYPES.RED_MUSHROOM_BLOCK:
+      case BLOCK_TYPES.BROWN_MUSHROOM_BLOCK:
         return 0.4;
       case BLOCK_TYPES.DIRT:
       case BLOCK_TYPES.GRASS:
       case BLOCK_TYPES.SAND:
       case BLOCK_TYPES.RED_SAND:
+      case BLOCK_TYPES.MUD:
+      case BLOCK_TYPES.MOSS:
         return 0.65;
+      case BLOCK_TYPES.MELON:
+      case BLOCK_TYPES.PUMPKIN:
+        return 0.8;
       case BLOCK_TYPES.ICE:
         return 0.75;
       case BLOCK_TYPES.CORAL_PINK:
@@ -519,18 +742,32 @@ export class VoxelGameEngine {
         return 0.9;
       case BLOCK_TYPES.WOOD:
       case BLOCK_TYPES.BIRCH_WOOD:
+      case BLOCK_TYPES.DARK_OAK_WOOD:
+      case BLOCK_TYPES.JUNGLE_WOOD:
       case BLOCK_TYPES.WOOD_PLANKS:
       case BLOCK_TYPES.CRAFTING_TABLE:
         return 1.6;
       case BLOCK_TYPES.STONE:
       case BLOCK_TYPES.BRICK:
-        return 2.6;
+      case BLOCK_TYPES.TERRACOTTA:
+      case BLOCK_TYPES.RED_TERRACOTTA:
+      case BLOCK_TYPES.ORANGE_TERRACOTTA:
+      case BLOCK_TYPES.YELLOW_TERRACOTTA:
+      case BLOCK_TYPES.WHITE_TERRACOTTA:
+      case BLOCK_TYPES.BROWN_TERRACOTTA:
+        return 2.4;
       case BLOCK_TYPES.COAL_ORE:
       case BLOCK_TYPES.IRON_ORE:
-        return 3.4;
+      case BLOCK_TYPES.AMETHYST:
+      case BLOCK_TYPES.MAGMA:
+      case BLOCK_TYPES.GLOWSTONE:
+        return 3.2;
       case BLOCK_TYPES.GOLD_ORE:
       case BLOCK_TYPES.DIAMOND_ORE:
-        return 4.8;
+      case BLOCK_TYPES.DEEPSLATE:
+        return 4.5;
+      case BLOCK_TYPES.OBSIDIAN:
+        return 8.0;
       default:
         return 1.0;
     }
@@ -539,10 +776,11 @@ export class VoxelGameEngine {
   private spawnChipParticle(bx: number, by: number, bz: number, blockType: number) {
     let color = 0x888888;
     if (blockType === BLOCK_TYPES.GRASS) color = 0x5b8c32;
-    else if (blockType === BLOCK_TYPES.DIRT) color = 0x866043;
+    else if (blockType === BLOCK_TYPES.DIRT || blockType === BLOCK_TYPES.MUD) color = 0x866043;
     else if (blockType === BLOCK_TYPES.WOOD || blockType === BLOCK_TYPES.WOOD_PLANKS) color = 0x6e4e36;
     else if (blockType === BLOCK_TYPES.SAND) color = 0xd8c89b;
     else if (blockType === BLOCK_TYPES.LEAVES) color = 0x3d702d;
+    else if (blockType === BLOCK_TYPES.AMETHYST) color = 0x9b59b6;
 
     const geo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
     const mat = new THREE.MeshBasicMaterial({ color });
@@ -614,7 +852,6 @@ export class VoxelGameEngine {
     this.timeOfDay = (this.timeOfDay + dt * 0.015) % 1.0;
     const sunAngle = this.timeOfDay * Math.PI * 2;
     
-    // Celestial dome centered around the player's position at a far distance
     const px = this.camera.position.x;
     const py = this.camera.position.y;
     const pz = this.camera.position.z;
@@ -633,12 +870,10 @@ export class VoxelGameEngine {
 
     this.sunMesh.position.copy(sunPos);
     this.sunMesh.lookAt(playerTarget);
-    // Sun is only rendered when near or above the horizon
     this.sunMesh.visible = sunY > -6;
 
     this.moonMesh.position.copy(moonPos);
     this.moonMesh.lookAt(playerTarget);
-    // Moon is only rendered when near or above the horizon
     this.moonMesh.visible = -sunY > -6;
 
     const isSunUp = sunY > 0;
@@ -650,7 +885,6 @@ export class VoxelGameEngine {
     const underwaterSky = new THREE.Color(0x0f4c81);
 
     if (this.physics.isSubmerged) {
-      // Underwater atmospheric fog & tint
       this.scene.background = underwaterSky;
       if (this.scene.fog) {
         (this.scene.fog as THREE.FogExp2).color = underwaterSky;
@@ -678,7 +912,6 @@ export class VoxelGameEngine {
       this.hemiLight.intensity = 0.1;
     }
 
-    // Apply Weather Modifiers
     let fogDensity = 0.016;
     let fogColor = skyColor;
 
@@ -693,7 +926,6 @@ export class VoxelGameEngine {
       this.ambientLight.intensity *= weatherMod.ambientIntensityMultiplier;
       fogDensity = weatherMod.fogDensity;
 
-      // Sudden Lightning flash during thunderstorm
       if (weatherMod.isLightningActive) {
         skyColor = new THREE.Color(0xffffff);
         fogColor = new THREE.Color(0xffffff);
@@ -714,10 +946,8 @@ export class VoxelGameEngine {
   }
 
   updateArmorVisuals() {
-    // 1. Sync 3D player armor meshes for 3rd person and shadow
     this.steve.setEquippedArmor(this.inventory.armorSlots);
 
-    // 2. Sync First-Person view model sleeve color based on equipped chestplate
     const chest = this.inventory.armorSlots[1];
     if (chest) {
       const info = ARMOR_DATA[chest.id];
@@ -729,15 +959,13 @@ export class VoxelGameEngine {
         this.viewModel.setSleeveColor(col);
       }
     } else {
-      this.viewModel.setSleeveColor('#009494'); // Default Steve Cyan sleeve
+      this.viewModel.setSleeveColor('#009494');
     }
 
-    // 3. Keep physics damage reduction updated
     this.physics.damageReduction = this.inventory.getDamageReduction();
   }
 
   setSelectedBlock(blockId: number) {
-    // Find or set slot
     this.inventory.slots[this.inventory.selectedHotbarIndex] = { id: blockId, count: 64 };
     this.updateHeldItem();
   }
@@ -790,11 +1018,9 @@ export class VoxelGameEngine {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
 
-    // Keep held item and equipped armor visuals synchronized
     this.updateHeldItem();
     this.updateArmorVisuals();
 
-    // Weather Simulation & Environmental Modifiers
     const weatherMod = this.weather.update(
       dt,
       this.physics.position.x,
@@ -802,7 +1028,7 @@ export class VoxelGameEngine {
       this.physics.position.z
     );
 
-    // FPS calculation
+    // FPS & Stats calculation
     this.frameCount++;
     this.fpsTimer += dt;
     if (this.fpsTimer >= 0.5) {
@@ -819,6 +1045,8 @@ export class VoxelGameEngine {
         if (!isSunUp) timeStr = 'Night';
         else if (factor < 0.4) timeStr = 'Golden Hour';
 
+        const biome = this.world.getBiome(this.physics.position.x, this.physics.position.z);
+
         this.onStatsUpdate({
           fps: this.currentFps,
           x: Math.round(this.physics.position.x),
@@ -826,10 +1054,12 @@ export class VoxelGameEngine {
           z: Math.round(this.physics.position.z),
           timeOfDay: timeStr,
           isNight: !isSunUp,
-          selectedBlockId: this.inventory.getSelectedBlockId(),
+          selectedBlockId: this.inventory.slots[this.inventory.selectedHotbarIndex]?.id || null,
           isLocked: this.isLocked,
           health: Math.round(this.physics.health),
           oxygen: Math.round(this.physics.oxygen),
+          hunger: Math.round(this.physics.hunger),
+          maxHunger: Math.round(this.physics.maxHunger),
           isSubmerged: this.physics.isSubmerged,
           inWater: this.physics.inWater,
           perspectiveMode: this.perspectiveMode,
@@ -839,18 +1069,17 @@ export class VoxelGameEngine {
           gameMode: this.physics.gameMode,
           difficulty: this.physics.difficulty,
           isFlying: this.physics.isFlying,
+          biomeName: biome.name,
         });
       }
     }
 
     if (this.isPaused) {
       this.renderer.render(this.scene, this.camera);
-      requestAnimationFrame(this.animate.bind(this));
       return;
     }
 
     if (this.inPanoramaMode) {
-      // 1. Cinematic Rotating Orbit for Minecraft Title Screen
       const panSpeed = now * 0.00015;
       const panRadius = 26;
       const centerX = 0;
@@ -869,13 +1098,30 @@ export class VoxelGameEngine {
       this.steve.update(dt, true, 2.5, 0, panSpeed + Math.PI, false);
       this.viewModel.root.visible = false;
 
-      // Stream chunks around center
       this.world.update(centerX, centerZ);
     } else {
-      // 1. Physics & Collision
+      // 1. Physics & Water Transition Events
       this.physics.update(dt, this.keys);
 
-      // 2. Dynamic Infinite World Chunks Generation & Streaming
+      if (this.physics.justEnteredWater) {
+        sounds.playWaterSplash();
+        this.spawnWaterSplashParticles(this.physics.position.x, this.physics.position.y, this.physics.position.z);
+      } else if (this.physics.justExitedWater) {
+        sounds.playWaterExit();
+      }
+
+      if (this.physics.isSubmerged) {
+        this.bubbleTimer += dt;
+        if (this.bubbleTimer > 0.25) {
+          this.bubbleTimer = 0;
+          this.spawnBubbleParticle(this.physics.position.x, this.physics.position.y + 1.4, this.physics.position.z);
+        }
+      }
+
+      // 2. Real-time Water Flow Cellular Automata
+      this.world.updateWaterPhysics(dt);
+
+      // 3. Dynamic Infinite World Chunks Generation & Streaming
       this.world.update(this.physics.position.x, this.physics.position.z);
 
       const px = this.physics.position.x;
@@ -883,12 +1129,10 @@ export class VoxelGameEngine {
       const pz = this.physics.position.z;
       const eyeY = py + this.physics.eyeHeight;
 
-      // Calculate motion for animations
       const horizVelocitySq = this.physics.velocity.x * this.physics.velocity.x + this.physics.velocity.z * this.physics.velocity.z;
       const isMoving = horizVelocitySq > 0.1;
       const moveSpeed = Math.sqrt(horizVelocitySq);
 
-      // Update Steve Character Model
       this.steve.group.position.set(px, py, pz);
       this.steve.update(
         dt,
@@ -899,15 +1143,12 @@ export class VoxelGameEngine {
         this.physics.inWater
       );
 
-      // Update First-Person View Model (Right Arm + Held Items)
       this.viewModel.update(dt, isMoving, moveSpeed);
 
-      // Play footsteps while walking or sprinting on ground or wading through water
       if (isMoving && (this.physics.onGround || this.physics.inWater)) {
         sounds.playFootstep(this.physics.isSprinting);
       }
 
-      // Update nature ambience (wind, ocean, underwater, weather)
       sounds.updateAmbience(dt, {
         y: this.physics.position.y,
         isSubmerged: this.physics.isSubmerged,
@@ -918,9 +1159,8 @@ export class VoxelGameEngine {
         windGainMod: weatherMod.windAudioGainMod,
       });
 
-      // 3. Camera positioning according to Perspective
+      // 4. Camera Positioning
       if (this.perspectiveMode === 0) {
-        // First Person: Camera at player eyes
         this.camera.position.set(px, eyeY, pz);
         const euler = new THREE.Euler(0, 0, 0, 'YXZ');
         euler.x = this.physics.pitch;
@@ -930,7 +1170,6 @@ export class VoxelGameEngine {
         this.steve.group.visible = false;
         this.viewModel.root.visible = true;
       } else if (this.perspectiveMode === 1) {
-        // Third Person Behind: 3.2m behind player looking forward
         this.steve.group.visible = true;
         this.viewModel.root.visible = false;
 
@@ -939,7 +1178,6 @@ export class VoxelGameEngine {
         this.camera.position.set(px + offset.x, eyeY + offset.y, pz + offset.z);
         this.camera.lookAt(px, eyeY, pz);
       } else {
-        // Third Person Front: 3.2m in front looking back at Steve
         this.steve.group.visible = true;
         this.viewModel.root.visible = false;
 
@@ -950,19 +1188,20 @@ export class VoxelGameEngine {
       }
     }
 
-    // 4. Day / Night & Atmospheric cycle
+    // 5. Day / Night cycle
     this.updateDayNightCycle(dt, weatherMod);
 
-    // 5. Raycasting for block targeting & mining progression
+    // 6. Targeting & Mining
     if (!this.inPanoramaMode) {
       this.updateTargeting();
       this.updateMining(dt);
+      this.updateItemDrops(dt);
     } else {
       this.wireframeBox.visible = false;
       this.breakOverlay.hide();
     }
 
-    // 6. Update AI Mobs (Sheep & Zombies)
+    // 7. Update AI Mobs
     if (!this.inPanoramaMode) {
       const isDay = Math.sin(this.timeOfDay * Math.PI * 2) > 0;
       this.mobs.update(
@@ -979,12 +1218,153 @@ export class VoxelGameEngine {
       );
     }
 
-    // 7. Update debris particles
+    // 8. Update Particles
     this.updateParticles(dt);
 
-    // 8. Render
+    // 9. Dynamic Torch Lighting (OptiFine handheld + placed world torches)
+    this.updateTorchLighting(now);
+
+    // 10. Throwable Snowball Projectiles
+    this.updateSnowballs(dt);
+
+    // 11. Render Scene
     this.renderer.render(this.scene, this.camera);
   };
+
+  private updateTorchLighting(now: number) {
+    if (this.inPanoramaMode) {
+      this.heldTorchLight.visible = false;
+      this.torchLightPool.forEach((l) => (l.visible = false));
+      return;
+    }
+
+    // 1. Handheld Torch Dynamic Light (OptiFine Real-Time Lighting)
+    const activeItem = this.inventory.slots[this.inventory.selectedHotbarIndex];
+    const isHoldingTorch = activeItem?.id === BLOCK_TYPES.TORCH;
+
+    if (isHoldingTorch) {
+      this.heldTorchLight.visible = true;
+      const eyeY = this.physics.position.y + this.physics.eyeHeight;
+      this.heldTorchLight.position.set(
+        this.physics.position.x,
+        eyeY - 0.15,
+        this.physics.position.z
+      );
+      // Realistic golden torch flicker
+      const flicker = Math.sin(now * 0.016) * 0.22 + Math.cos(now * 0.038) * 0.14;
+      this.heldTorchLight.intensity = 2.85 + flicker;
+      this.heldTorchLight.color.setHex(0xffaa3e);
+    } else {
+      this.heldTorchLight.visible = false;
+    }
+
+    // 2. Placed World Torches Dynamic Lighting
+    const nearbyTorches = this.world.getNearbyTorches(
+      this.physics.position.x,
+      this.physics.position.y,
+      this.physics.position.z,
+      24
+    );
+
+    for (let i = 0; i < this.torchLightPool.length; i++) {
+      const light = this.torchLightPool[i];
+      if (i < nearbyTorches.length) {
+        const torch = nearbyTorches[i];
+        light.visible = true;
+        light.position.set(torch.x + 0.5, torch.y + 0.72, torch.z + 0.5);
+        const flicker = Math.sin(now * 0.014 + i * 1.5) * 0.2 + Math.cos(now * 0.027 + i) * 0.12;
+        light.intensity = 2.5 + flicker;
+      } else {
+        light.visible = false;
+      }
+    }
+  }
+
+  private throwSnowball() {
+    const geom = new THREE.SphereGeometry(0.13, 8, 8);
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const mesh = new THREE.Mesh(geom, mat);
+
+    const eyePos = new THREE.Vector3(
+      this.physics.position.x,
+      this.physics.position.y + this.physics.eyeHeight - 0.1,
+      this.physics.position.z
+    );
+    mesh.position.copy(eyePos);
+
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    mesh.position.addScaledVector(dir, 0.45);
+
+    const vel = dir.clone().multiplyScalar(22);
+    vel.y += 1.6; // upward arc
+
+    this.scene.add(mesh);
+    this.snowballs.push({ mesh, vel, life: 0 });
+  }
+
+  private updateSnowballs(dt: number) {
+    for (let i = this.snowballs.length - 1; i >= 0; i--) {
+      const sb = this.snowballs[i];
+      sb.life += dt;
+      sb.vel.y -= 14 * dt; // gravity
+      sb.mesh.position.addScaledVector(sb.vel, dt);
+
+      // Check mob hit
+      const rayDir = sb.vel.clone().normalize();
+      const hitMob = this.mobs.hitMobWithRay(sb.mesh.position, rayDir, 0.85, 4);
+      if (hitMob) {
+        sounds.playSnowballHit();
+        this.spawnSnowPuff(sb.mesh.position);
+        this.scene.remove(sb.mesh);
+        sb.mesh.geometry.dispose();
+        (sb.mesh.material as THREE.Material).dispose();
+        this.snowballs.splice(i, 1);
+        continue;
+      }
+
+      // Check block collision
+      const bx = Math.floor(sb.mesh.position.x);
+      const by = Math.floor(sb.mesh.position.y);
+      const bz = Math.floor(sb.mesh.position.z);
+      if (this.world.isSolid(bx, by, bz) || sb.mesh.position.y <= 0) {
+        sounds.playSnowballHit();
+        this.spawnSnowPuff(sb.mesh.position);
+        this.scene.remove(sb.mesh);
+        sb.mesh.geometry.dispose();
+        (sb.mesh.material as THREE.Material).dispose();
+        this.snowballs.splice(i, 1);
+        continue;
+      }
+
+      if (sb.life > 5.0) {
+        this.scene.remove(sb.mesh);
+        sb.mesh.geometry.dispose();
+        (sb.mesh.material as THREE.Material).dispose();
+        this.snowballs.splice(i, 1);
+      }
+    }
+  }
+
+  private spawnSnowPuff(pos: THREE.Vector3) {
+    for (let i = 0; i < 8; i++) {
+      const geom = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xf5f9fc, transparent: true, opacity: 0.9 });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.copy(pos).add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.35,
+        (Math.random() - 0.5) * 0.35,
+        (Math.random() - 0.5) * 0.35
+      ));
+      const vel = new THREE.Vector3(
+        (Math.random() - 0.5) * 3.2,
+        Math.random() * 2.5 + 0.8,
+        (Math.random() - 0.5) * 3.2
+      );
+      this.scene.add(mesh);
+      this.particles.push({ mesh, velocity: vel, life: 0, maxLife: 0.38 });
+    }
+  }
 
   private updateMining(dt: number) {
     if (this.isMining && this.targetBlock && this.targetBlock.y > 0) {
@@ -1002,7 +1382,6 @@ export class VoxelGameEngine {
         return;
       }
 
-      // Check if target changed
       if (
         !this.miningBlock ||
         this.miningBlock.x !== x ||
@@ -1014,7 +1393,6 @@ export class VoxelGameEngine {
         this.miningSwingTimer = 0;
       }
 
-      // Continuous arm swing & chip audio
       this.miningSwingTimer += dt;
       if (this.miningSwingTimer >= 0.18) {
         this.miningSwingTimer = 0;
@@ -1025,30 +1403,36 @@ export class VoxelGameEngine {
       }
 
       const baseTime = this.getBlockHardnessTime(blockType);
-      const toolMultiplier = this.inventory.getActiveToolSpeedMultiplier(blockType);
+      const activeItem = this.inventory.slots[this.inventory.selectedHotbarIndex];
+      let toolMultiplier = 1.0;
+      if (activeItem) {
+        if (activeItem.id === ITEM_TYPES.DIAMOND_PICKAXE) toolMultiplier = 4.5;
+        else if (activeItem.id === ITEM_TYPES.IRON_PICKAXE) toolMultiplier = 3.0;
+        else if (activeItem.id === ITEM_TYPES.STONE_PICKAXE) toolMultiplier = 2.0;
+        else if (activeItem.id === ITEM_TYPES.WOOD_PICKAXE) toolMultiplier = 1.5;
+      }
       const finalTime = Math.max(0.12, baseTime / toolMultiplier);
 
       this.miningProgress += dt / finalTime;
       this.breakOverlay.setProgress(x, y, z, this.miningProgress);
 
       if (this.miningProgress >= 1.0) {
-        // Block completely broken!
         this.world.setBlock(x, y, z, BLOCK_TYPES.AIR);
         this.spawnDebris(x, y, z, blockType);
         sounds.playBlockBreak(blockType);
 
-        const dropItem = this.inventory.getDropForBlock(blockType);
-        this.inventory.addItem(dropItem, 1);
-        sounds.playItemPickup();
+        // Spawn satisfying 3D floating Item Drop!
+        this.spawnItemDrop(x, y, z, blockType);
 
         // Deduct tool durability
-        const damageRes = this.inventory.damageActiveTool(1);
-        if (damageRes.destroyed) {
-          // Tool reached zero durability: trigger destruction animation, sound, and particle explosion!
-          this.viewModel.triggerToolBreak();
-          sounds.playToolBreak();
-          this.spawnToolBreakParticles(damageRes.toolId);
-          this.updateHeldItem();
+        if (this.physics.gameMode !== 'creative') {
+          const broke = this.inventory.reduceToolDurability(this.inventory.selectedHotbarIndex, 1);
+          if (broke) {
+            this.viewModel.triggerToolBreak();
+            sounds.playToolBreak();
+            this.spawnToolBreakParticles(activeItem?.id);
+            this.updateHeldItem();
+          }
         }
 
         this.miningProgress = 0;
@@ -1067,10 +1451,9 @@ export class VoxelGameEngine {
 
   setDifficulty(difficulty: GameDifficulty) {
     this.physics.difficulty = difficulty;
-    // If set to peaceful, immediately clear hostile mobs
     if (difficulty === 'peaceful') {
       for (let i = this.mobs.mobs.length - 1; i >= 0; i--) {
-        if (this.mobs.mobs[i].type === 'zombie') {
+        if (this.mobs.mobs[i].type === 'zombie' || this.mobs.mobs[i].type === 'creeper') {
           this.mobs.mobs[i].destroy();
           this.mobs.mobs.splice(i, 1);
         }
@@ -1090,7 +1473,6 @@ export class VoxelGameEngine {
   }
 
   spawnMob(type: MobType) {
-    // Spawn 3-5 blocks in front of player
     const dir = new THREE.Vector3();
     this.camera.getWorldDirection(dir);
     dir.y = 0;
@@ -1105,6 +1487,20 @@ export class VoxelGameEngine {
     this.weather.destroy();
     this.mobs.destroy();
     this.breakOverlay.dispose();
+
+    // Clean up snowballs & torch lights
+    this.snowballs.forEach((sb) => {
+      this.scene.remove(sb.mesh);
+      sb.mesh.geometry.dispose();
+      (sb.mesh.material as THREE.Material).dispose();
+    });
+    this.snowballs = [];
+    this.torchLightPool.forEach((l) => this.scene.remove(l));
+    this.torchLightPool = [];
+    if (this.heldTorchLight) {
+      this.scene.remove(this.heldTorchLight);
+    }
+
     document.removeEventListener('pointerlockchange', this.boundOnPointerLockChange);
     window.removeEventListener('mousemove', this.boundOnMouseMove);
     this.renderer.domElement.removeEventListener('mousedown', this.boundOnMouseDown);

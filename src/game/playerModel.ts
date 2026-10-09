@@ -240,8 +240,9 @@ export class SteveCharacter {
   swingTime: number = 0;
   isSwinging: boolean = false;
 
-  constructor() {
+  constructor(scene?: THREE.Scene) {
     this.group = new THREE.Group();
+    if (scene) scene.add(this.group);
     const mats = generateSteveMaterials();
 
     // Head (0.5 x 0.5 x 0.5)
@@ -579,8 +580,9 @@ export class FirstPersonViewModel {
 
   currentSleeveColor: string = '#009494';
 
-  constructor() {
+  constructor(camera?: THREE.Camera) {
     this.root = new THREE.Group();
+    if (camera) camera.add(this.root);
     this.armGroup = new THREE.Group();
     this.armGroup.position.copy(this.basePos);
     this.armGroup.rotation.copy(this.baseRot);
